@@ -60,10 +60,10 @@ function Parse-Xml([byte[]]$Bytes,[string]$Part){
 
 function Get-RelSource([string]$Part){
     $p=$Part.Replace('\','/')
-    if($p -eq '_rels/.rels'){return ''}
+    if ($p -eq '_rels/.rels') { return '' }
     $marker='/_rels/'
     $i=$p.IndexOf($marker,[StringComparison]::Ordinal)
-    if($i -lt 0 -or -not $p.EndsWith('.rels',[StringComparison]::OrdinalIgnoreCase)){throw "INVALID_RELS_PART:$Part"}
+    if ($i -lt 0 -or -not $p.EndsWith('.rels',[StringComparison]::OrdinalIgnoreCase)) { throw "INVALID_RELS_PART:$Part" }
     $prefix=$p.Substring(0,$i)
     $name=$p.Substring($i+$marker.Length)
     $sourceName=$name.Substring(0,$name.Length-5)
@@ -72,7 +72,7 @@ function Get-RelSource([string]$Part){
 }
 
 function Resolve-Rel([string]$Source,[string]$Target){
-    if($Target.StartsWith('/')){return $Target.TrimStart('/')}
+    if ($Target.StartsWith('/')) { return $Target.TrimStart('/') }
     $base=if([string]::IsNullOrEmpty($Source)){[Uri]'http://package/'}else{[Uri]("http://package/"+$Source)}
     return [Uri]::UnescapeDataString(([Uri]::new($base,$Target)).AbsolutePath.TrimStart('/'))
 }
@@ -82,7 +82,7 @@ function Has-Motw([string]$Path){
 }
 
 function Release-Com([object]$Object){
-    if($null -ne $Object -and [Runtime.InteropServices.Marshal]::IsComObject($Object)){
+    if ($null -ne $Object -and [Runtime.InteropServices.Marshal]::IsComObject($Object)) {
         [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($Object)
     }
 }
@@ -119,7 +119,7 @@ try{
 
     $readFailures=[System.Collections.Generic.List[string]]::new()
     foreach($entry in $zip.Entries){
-        if([string]::IsNullOrEmpty($entry.FullName)-or$entry.FullName.EndsWith('/')){continue}
+        if ([string]::IsNullOrEmpty($entry.FullName) -or $entry.FullName.EndsWith('/')) { continue }
         $entries[$entry.FullName]=$entry
         try{[void](Read-EntryBytes $entry)}catch{$readFailures.Add("$($entry.FullName):$($_.Exception.Message)")}
     }
@@ -139,12 +139,12 @@ try{
     $nsFailures=[System.Collections.Generic.List[string]]::new()
     foreach($part in $docs.Keys){
         foreach($element in @($docs[$part].SelectNodes('//*'))){
-            if($null -eq $element -or $element.NodeType -ne [System.Xml.XmlNodeType]::Element){continue}
+            if ($null -eq $element -or $element.NodeType -ne [System.Xml.XmlNodeType]::Element) { continue }
             $ign=$element.GetAttribute('Ignorable',$McNs)
             foreach($prefix in ($ign -split '\s+'|Where-Object{$_})){
                 if([string]::IsNullOrEmpty($element.GetNamespaceOfPrefix($prefix))){$nsFailures.Add(("{0}:Ignorable:{1}" -f $part,$prefix))}
             }
-            if($element.NamespaceURI -eq $McNs -and $element.LocalName -eq 'Choice'){
+            if ($element.NamespaceURI -eq $McNs -and $element.LocalName -eq 'Choice') {
                 foreach($prefix in ($element.GetAttribute('Requires') -split '\s+'|Where-Object{$_})){
                     if([string]::IsNullOrEmpty($element.GetNamespaceOfPrefix($prefix))){$nsFailures.Add(("{0}:Requires:{1}" -f $part,$prefix))}
                 }
@@ -159,7 +159,7 @@ try{
         $mgr=[System.Xml.XmlNamespaceManager]::new($doc.NameTable);$mgr.AddNamespace('r',$RelNs)
         $source=Get-RelSource $relPart
         foreach($rel in @($doc.SelectNodes('/r:Relationships/r:Relationship',$mgr))){
-            if($rel.GetAttribute('TargetMode') -eq 'External'){continue}
+            if ($rel.GetAttribute('TargetMode') -eq 'External') { continue }
             try{
                 $target=Resolve-Rel $source $rel.GetAttribute('Target')
                 if(-not$entries.ContainsKey($target)){$relFailures.Add(("{0}:{1}->{2}" -f $relPart,$rel.GetAttribute('Id'),$target))}
@@ -175,9 +175,9 @@ try{
     foreach($n in @($ct.SelectNodes('/ct:Types/ct:Override',$mgr))){$overrides[$n.GetAttribute('PartName').TrimStart('/')]=$n.GetAttribute('ContentType')}
     $ctFailures=[System.Collections.Generic.List[string]]::new()
     foreach($part in $entries.Keys){
-        if($part -eq '[Content_Types].xml'){continue}
+        if ($part -eq '[Content_Types].xml') { continue }
         $ext=[IO.Path]::GetExtension($part).TrimStart('.').ToLowerInvariant()
-        if(-not$overrides.ContainsKey($part)-and([string]::IsNullOrEmpty($ext)-or-not$defaults.ContainsKey($ext))){$ctFailures.Add($part)}
+        if (-not $overrides.ContainsKey($part) -and ([string]::IsNullOrEmpty($ext) -or -not $defaults.ContainsKey($ext))) { $ctFailures.Add($part) }
     }
     Add-Check 'OOXML_CONTENT_TYPES_COMPLETE' ($ctFailures.Count -eq 0) @($ctFailures)
 
@@ -196,7 +196,7 @@ try{
         $calc.GetAttribute('fullCalcOnLoad') -eq '1' -and
         $calc.GetAttribute('forceFullCalc') -eq '1'
     )
-    Add-Check 'WORKBOOK_FULL_RECALC_FLAGS' $calcPass $(if($null-eq$calc){$null}else{@{calcMode=$calc.GetAttribute('calcMode');fullCalcOnLoad=$calc.GetAttribute('fullCalcOnLoad');forceFullCalc=$calc.GetAttribute('forceFullCalc')}})
+    Add-Check 'WORKBOOK_FULL_RECALC_FLAGS' $calcPass $(if ($null -eq $calc) { $null } else {@{calcMode=$calc.GetAttribute('calcMode');fullCalcOnLoad=$calc.GetAttribute('fullCalcOnLoad');forceFullCalc=$calc.GetAttribute('forceFullCalc')}})
 
     $macroBound=$false
     foreach($part in @($entries.Keys|Where-Object{$_ -like 'xl/worksheets/*.xml'})){
@@ -207,7 +207,7 @@ try{
     $formulas=[System.Collections.Generic.List[string]]::new()
     foreach($part in @($entries.Keys|Where-Object{$_ -like 'xl/worksheets/*.xml'})){
         $doc=$docs[$part];$mgr=[System.Xml.XmlNamespaceManager]::new($doc.NameTable);$mgr.AddNamespace('x',$SpreadsheetNs)
-        foreach($f in @($doc.SelectNodes('//x:f',$mgr))){if($f.InnerText){$formulas.Add($f.InnerText)}}
+        foreach($f in @($doc.SelectNodes('//x:f',$mgr))){if ($f.InnerText) { $formulas.Add($f.InnerText) }}
     }
     $f=@($formulas)
     $counts=[ordered]@{
@@ -244,7 +244,7 @@ if(-not$SkipExcelRuntime){
         try{$excel.AutomationSecurity=1;Add-Check 'EXCEL_TEMP_AUTOMATION_SECURITY' $true 'msoAutomationSecurityLow in isolated Excel process'}
         catch{Add-Check 'EXCEL_TEMP_AUTOMATION_SECURITY' $false $_.Exception.Message}
         $m=[Type]::Missing
-        try{$book=$excel.Workbooks.Open($runtime,0,$false,$m,$m,$m,$true,$m,$m,$false,$false,$m,$false,$true,0);Add-Check 'EXCEL_OPEN_NORMAL_NO_REPAIR_REQUEST' ($null-ne$book) @{read_only=[bool]$book.ReadOnly}}
+        try{$book=$excel.Workbooks.Open($runtime,0,$false,$m,$m,$m,$true,$m,$m,$false,$false,$m,$false,$true,0);Add-Check 'EXCEL_OPEN_NORMAL_NO_REPAIR_REQUEST' ($null -ne $book) @{read_only=[bool]$book.ReadOnly}}
         catch{Add-Check 'EXCEL_OPEN_NORMAL_NO_REPAIR_REQUEST' $false $_.Exception.Message;throw}
 
         $runtimeNames=@();for($i=1;$i-le$book.Worksheets.Count;$i++){$runtimeNames += [string]$book.Worksheets.Item($i).Name}
@@ -258,7 +258,7 @@ if(-not$SkipExcelRuntime){
             try{
                 $sheet=$book.Worksheets.Item($i);$used=$sheet.UsedRange
                 try{$errs=$used.SpecialCells(-4123,16)}catch{$errs=$null}
-                if($null-ne$errs){foreach($area in @($errs.Areas)){$errorCells.Add("$($sheet.Name)!$($area.Address($false,$false))")}}
+                if ($null -ne $errs) { foreach ($area in @($errs.Areas)) { $errorCells.Add("$($sheet.Name)!$($area.Address($false,$false))") } }
             }finally{Release-Com $errs;Release-Com $used;Release-Com $sheet}
         }
         Add-Check 'EXCEL_NO_FORMULA_ERROR_CELLS_AFTER_RECALC' ($errorCells.Count -eq 0) @($errorCells)
@@ -287,19 +287,19 @@ if(-not$SkipExcelRuntime){
         foreach($hours in @(66,67,68)){
             $jan.Range('E2').Value2=$hours/24.0;$excel.CalculateFullRebuild();Wait-Calculation $excel
             $total=[double]$jan.Range('E33').Value2*24;$under=[double]$jan.Range('E34').Value2*24;$over=[double]$jan.Range('E35').Value2*24
-            Add-Check ("SCENARIO_MONTH_CAP_{0}H"-f$hours) ((Near $total $hours)-and(Near $under ([Math]::Max(0,67-$hours)))-and(Near $over ([Math]::Max(0,$hours-67)))) @{total=$total;under=$under;over=$over}
+            Add-Check ("SCENARIO_MONTH_CAP_{0}H" -f $hours) ((Near $total $hours) -and (Near $under ([Math]::Max(0,67-$hours))) -and (Near $over ([Math]::Max(0,$hours-67)))) @{total=$total;under=$under;over=$over}
         }
 
         foreach($count in @(19,20,21)){
             $jan.Range('F2:G32').Value2=0;$jan.Range('F2').Value2=$count;$excel.CalculateFullRebuild();Wait-Calculation $excel
             $accepted=[double]$jan.Range('G33').Value2;$under=[double]$jan.Range('G34').Value2;$over=[double]$jan.Range('G35').Value2
-            Add-Check ("SCENARIO_MONTH_MEAL_CAP_{0}"-f$count) ((Near $accepted ([Math]::Min($count,20)))-and(Near $under ([Math]::Max(0,20-[Math]::Min($count,20))))-and(Near $over ([Math]::Max(0,$count-20)))) @{accepted=$accepted;under=$under;over=$over}
+            Add-Check ("SCENARIO_MONTH_MEAL_CAP_{0}" -f $count) ((Near $accepted ([Math]::Min($count,20))) -and (Near $under ([Math]::Max(0,20-[Math]::Min($count,20)))) -and (Near $over ([Math]::Max(0,$count-20)))) @{accepted=$accepted;under=$under;over=$over}
         }
 
         foreach($hours in @(176,177,178)){
             $march.Range('L2').Value2=$hours/24.0;$march.Range('L3:L4').Value2=0;$excel.CalculateFullRebuild();Wait-Calculation $excel
             $total=[double]$march.Range('L5').Value2*24;$under=[double]$march.Range('L6').Value2*24;$over=[double]$march.Range('L7').Value2*24
-            Add-Check ("SCENARIO_QUARTER_CAP_{0}H"-f$hours) ((Near $total $hours)-and(Near $under ([Math]::Max(0,177-$hours)))-and(Near $over ([Math]::Max(0,$hours-177)))) @{total=$total;under=$under;over=$over}
+            Add-Check ("SCENARIO_QUARTER_CAP_{0}H" -f $hours) ((Near $total $hours) -and (Near $under ([Math]::Max(0,177-$hours))) -and (Near $over ([Math]::Max(0,$hours-177)))) @{total=$total;under=$under;over=$over}
         }
 
         $settings.Range('B1').Value2=2027
@@ -318,10 +318,10 @@ if(-not$SkipExcelRuntime){
             Add-Check 'EXCEL_SAVE_CLOSE_REOPEN_ROUNDTRIP' ([int]$round.Worksheets.Count -eq 14) @{worksheet_count=[int]$round.Worksheets.Count}
         }catch{Add-Check 'EXCEL_SAVE_CLOSE_REOPEN_ROUNDTRIP' $false $_.Exception.Message}
     }finally{
-        if($null-ne$round){try{$round.Close($false)}catch{}}
-        if($null-ne$book){try{$book.Close($false)}catch{}}
+        if ($null -ne $round) { try { $round.Close($false) } catch {} }
+        if ($null -ne $book) { try { $book.Close($false) } catch {} }
         Release-Com $march;Release-Com $jan;Release-Com $settings;Release-Com $round;Release-Com $book
-        if($null-ne$excel){try{$excel.Quit()}catch{};Release-Com $excel}
+        if ($null -ne $excel) { try { $excel.Quit() } catch {}; Release-Com $excel }
         [GC]::Collect();[GC]::WaitForPendingFinalizers();[GC]::Collect();[GC]::WaitForPendingFinalizers()
         Remove-Item $root -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -335,4 +335,4 @@ $lines=[System.Collections.Generic.List[string]]::new();$lines.Add("OVERTIME_CAL
 foreach($c in $script:Checks){$state=if($c.pass){'PASS'}elseif($c.required){'FAIL'}else{'WARN'};$lines.Add(("{0}={1}"-f$c.name,$state))|Out-Null}
 $lines.Add("FINAL_RESULT=$final")|Out-Null;$lines|Set-Content $TextOut -Encoding utf8;$lines|ForEach-Object{Write-Host $_}
 Write-Host "AUDIT_JSON=$JsonOut";Write-Host "AUDIT_TEXT=$TextOut"
-if($script:Failed){exit 90}else{exit 0}
+if ($script:Failed) { exit 90 } else { exit 0 }
