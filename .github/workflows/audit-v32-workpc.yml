@@ -1,9 +1,6 @@
 name: Overtime v3.2 AHO Work-PC Audit
 
 on:
-  push:
-    branches:
-      - audit/aho-workpc-excel-v1
   workflow_dispatch:
 
 permissions:
@@ -11,11 +8,13 @@ permissions:
 
 concurrency:
   group: overtime-v32-aho-workpc-audit-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   audit:
-    if: ${{ false }}
+    if: >-
+      ${{ github.repository == 'hairtaileun/overtime-calculator' &&
+          github.actor_id == '246975164' }}
     runs-on: [self-hosted, Windows, X64, aho, workpc, runner-01]
     timeout-minutes: 20
     steps:
