@@ -1,0 +1,86 @@
+name: Overtime v3.2 AHO Work-PC Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: overtime-v32-aho-workpc-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: >-
+      ${{ github.repository == 'hairtaileun/overtime-calculator' &&
+          github.actor_id == '246975164' }}
+    runs-on: [self-hosted, Windows, X64, aho, workpc, runner-01]
+    timeout-minutes: 20
+    steps:
+      - name: Bind exact source subject
+        id: subject
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          if($env:EXPECTED_SHA -cnotmatch '^[0-9a-f]{40}$'){throw 'invalid GitHub source SHA'}
+          "sha=$env:EXPECTED_SHA" >> $env:GITHUB_OUTPUT
+          Write-Host "OVERTIME_AUDIT_EXPECTED_SHA=$env:EXPECTED_SHA"
+          Write-Host "OVERTIME_AUDIT_RUNNER=$env:RUNNER_NAME"
+          Write-Host "OVERTIME_AUDIT_COMPUTER=$env:COMPUTERNAME"
+
+      - name: Checkout exact source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.subject.outputs.sha }}
+          clean: true
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify immutable checkout identity
+        shell: pwsh
+        env:
+          EXPECTED_SHA: ${{ steps.subject.outputs.sha }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $actual=(git rev-parse HEAD).Trim()
+          if($actual -cne $env:EXPECTED_SHA){throw "HEAD mismatch: $actual != $env:EXPECTED_SHA"}
+          if(@(git status --porcelain --untracked-files=all).Count -ne 0){throw 'checkout is not clean'}
+          $tree=(git rev-parse 'HEAD^{tree}').Trim()
+          Write-Host "OVERTIME_AUDIT_EXACT_SHA=$actual"
+          Write-Host "OVERTIME_AUDIT_EXACT_TREE=$tree"
+
+      - name: Run full Excel audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          & powershell.exe -NoProfile -ExecutionPolicy Bypass -File '.\tools\audit-v32.ps1'
+          if($LASTEXITCODE -ne 0){throw "audit-v32.ps1 failed with exit code $LASTEXITCODE"}
+
+      - name: Seal bounded audit evidence
+        if: always()
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Continue'
+          foreach($p in @('audit-evidence.json','audit-evidence.txt')){
+            if(Test-Path -LiteralPath $p -PathType Leaf){
+              $h=(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant()
+              $n=(Get-Item -LiteralPath $p).Length
+              Write-Host "OVERTIME_AUDIT_EVIDENCE=$p|sha256:$h|bytes:$n"
+            }else{
+              Write-Host "OVERTIME_AUDIT_EVIDENCE_MISSING=$p"
+            }
+          }
+
+      - name: Upload bounded audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: overtime-v32-audit-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            audit-evidence.json
+            audit-evidence.txt
+          if-no-files-found: warn
+          retention-days: 30
