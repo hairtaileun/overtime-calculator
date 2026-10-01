@@ -177,6 +177,56 @@ Unblock-File -LiteralPath "C:\파일경로\2026초과v3.2.xlsm"
 
 > **주의:** 출처를 확인하지 않은 `.xlsm` 파일의 차단을 임의로 해제하지 마십시오. 이 저장소의 공식 배포본인지 확인하고 SHA-256이 README에 기재된 값과 일치하는 경우에만 해제하는 것을 권장합니다.
 
+## 전수 감사 러너
+
+저장소에는 Windows/Excel 실기 검증용 감사 러너가 포함됩니다.
+
+- `RUN-AUDIT.cmd`: 원클릭 실행기
+- `tools/audit-v32.ps1`: 실제 감사 로직
+- 기본 대상: 저장소 루트의 `2026초과v3.2.xlsm`
+
+실행:
+
+```text
+RUN-AUDIT.cmd
+```
+
+PowerShell에서 직접 실행하려면:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\audit-v32.ps1
+```
+
+감사 러너는 원본 파일을 직접 수정하지 않고 임시 복사본으로 Excel 런타임 검사를 수행합니다. 주요 검사항목은 다음과 같습니다.
+
+- ZIP/OOXML 엔트리, XML/RELS/VML strict parsing
+- `mc:Ignorable` / `mc:Choice Requires` namespace 완전성
+- 내부 relationship target과 Content Types
+- 공식 v3.2 파일 SHA-256 및 VBA 프로젝트 SHA-256
+- 14개 시트와 전체 재계산 설정
+- `RegenerateAllMonthB` 버튼의 매크로 연결
+- 1~12월 전체 수식 패턴 및 과거 오류 수식 잔존 여부
+- Microsoft Excel COM으로 정상 열기
+- `CalculateFullRebuild` 후 수식 오류 셀 검사
+- 휴일 일일상한 8시간 및 임의값 6시간 시나리오
+- 휴일 급량 1:00 → 0 / 1:01 → 1 경계값
+- 월상한 66/67/68시간
+- 월급량상한 19/20/21
+- 분기상한 176/177/178시간
+- `RegenerateAllMonthB` 매크로 실제 실행 및 2027년 주말 판정
+- Excel 저장 → 닫기 → 재오픈 round-trip
+
+필수 검사항목 중 하나라도 실패하면 exit code `90`으로 종료합니다. 성공하면 `0`입니다. 결과는 기본적으로 저장소 루트의 다음 파일에 기록됩니다.
+
+- `audit-evidence.json`
+- `audit-evidence.txt`
+
+GitHub에 커밋할 필요가 없는 실행 증적이므로 이 두 파일은 로컬 검증용으로 취급합니다.
+
+### AHO Work-PC 실행 경계
+
+이 러너는 Microsoft Excel이 설치된 Windows 환경에서 실행해야 하며 AHO Work-PC self-hosted runner에서의 실기 검증을 목표로 합니다. AHO의 현재 GitHub command ingress가 활성화되지 않은 상태에서는 이를 H4 broker-enforced 실행으로 표현하지 않습니다. AHO 쪽 실행 권한/lease가 허용되는 generation에서 self-hosted Work-PC 실행으로 검증해야 합니다.
+
 ## 호환성 및 주의사항
 
 - VBA를 사용하는 `.xlsm` 파일이므로 **Microsoft Excel 데스크톱 사용을 권장**합니다.
