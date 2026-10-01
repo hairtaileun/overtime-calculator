@@ -53,7 +53,7 @@ function Parse-Xml([byte[]]$Bytes,[string]$Part){
             $doc.XmlResolver=$null
             $doc.Load($reader)
             return $doc
-        }catch{throw "XML_PARSE_FAILED:$Part:$($_.Exception.Message)"}
+        }catch{throw ("XML_PARSE_FAILED:{0}:{1}" -f $Part,$_.Exception.Message)}
         finally{$reader.Dispose()}
     }finally{$mem.Dispose()}
 }
@@ -142,11 +142,11 @@ try{
             if($null -eq $element -or $element.NodeType -ne [System.Xml.XmlNodeType]::Element){continue}
             $ign=$element.GetAttribute('Ignorable',$McNs)
             foreach($prefix in ($ign -split '\s+'|Where-Object{$_})){
-                if([string]::IsNullOrEmpty($element.GetNamespaceOfPrefix($prefix))){$nsFailures.Add("$part:Ignorable:$prefix")}
+                if([string]::IsNullOrEmpty($element.GetNamespaceOfPrefix($prefix))){$nsFailures.Add(("{0}:Ignorable:{1}" -f $part,$prefix))}
             }
             if($element.NamespaceURI -eq $McNs -and $element.LocalName -eq 'Choice'){
                 foreach($prefix in ($element.GetAttribute('Requires') -split '\s+'|Where-Object{$_})){
-                    if([string]::IsNullOrEmpty($element.GetNamespaceOfPrefix($prefix))){$nsFailures.Add("$part:Requires:$prefix")}
+                    if([string]::IsNullOrEmpty($element.GetNamespaceOfPrefix($prefix))){$nsFailures.Add(("{0}:Requires:{1}" -f $part,$prefix))}
                 }
             }
         }
@@ -162,8 +162,8 @@ try{
             if($rel.GetAttribute('TargetMode') -eq 'External'){continue}
             try{
                 $target=Resolve-Rel $source $rel.GetAttribute('Target')
-                if(-not$entries.ContainsKey($target)){$relFailures.Add("$relPart:$($rel.GetAttribute('Id'))->$target")}
-            }catch{$relFailures.Add("$relPart:$($rel.GetAttribute('Id')):$($_.Exception.Message)")}
+                if(-not$entries.ContainsKey($target)){$relFailures.Add(("{0}:{1}->{2}" -f $relPart,$rel.GetAttribute('Id'),$target))}
+            }catch{$relFailures.Add(("{0}:{1}:{2}" -f $relPart,$rel.GetAttribute('Id'),$_.Exception.Message))}
         }
     }
     Add-Check 'OOXML_INTERNAL_RELATIONSHIP_TARGETS' ($relFailures.Count -eq 0) @($relFailures)
@@ -190,7 +190,12 @@ try{
     $sheetNames=@($wbDoc.SelectNodes('/x:workbook/x:sheets/x:sheet',$mgr)|ForEach-Object{$_.GetAttribute('name')})
     Add-Check 'WORKBOOK_EXPECTED_SHEETS' ($sheetNames.Count -eq $ExpectedSheets.Count -and -not(Compare-Object $ExpectedSheets $sheetNames -SyncWindow 0)) $sheetNames
     $calc=$wbDoc.SelectSingleNode('/x:workbook/x:calcPr',$mgr)
-    $calcPass=$null-ne$calc-and$calc.GetAttribute('calcMode')-eq'auto'-and$calc.GetAttribute('fullCalcOnLoad')-eq'1'-and$calc.GetAttribute('forceFullCalc')-eq'1'
+    $calcPass = (
+        $null -ne $calc -and
+        $calc.GetAttribute('calcMode') -eq 'auto' -and
+        $calc.GetAttribute('fullCalcOnLoad') -eq '1' -and
+        $calc.GetAttribute('forceFullCalc') -eq '1'
+    )
     Add-Check 'WORKBOOK_FULL_RECALC_FLAGS' $calcPass $(if($null-eq$calc){$null}else{@{calcMode=$calc.GetAttribute('calcMode');fullCalcOnLoad=$calc.GetAttribute('fullCalcOnLoad');forceFullCalc=$calc.GetAttribute('forceFullCalc')}})
 
     $macroBound=$false
@@ -243,7 +248,7 @@ if(-not$SkipExcelRuntime){
         catch{Add-Check 'EXCEL_OPEN_NORMAL_NO_REPAIR_REQUEST' $false $_.Exception.Message;throw}
 
         $runtimeNames=@();for($i=1;$i-le$book.Worksheets.Count;$i++){$runtimeNames += [string]$book.Worksheets.Item($i).Name}
-        Add-Check 'EXCEL_RUNTIME_EXPECTED_SHEETS' ($runtimeNames.Count-eq14-and-not(Compare-Object $ExpectedSheets $runtimeNames -SyncWindow 0)) $runtimeNames
+        Add-Check 'EXCEL_RUNTIME_EXPECTED_SHEETS' ($runtimeNames.Count -eq 14 -and -not (Compare-Object $ExpectedSheets $runtimeNames -SyncWindow 0)) $runtimeNames
         $excel.CalculateFullRebuild();Wait-Calculation $excel
         Add-Check 'EXCEL_FULL_CALCULATE_REBUILD' $true @{state=[int]$excel.CalculationState}
 
@@ -256,7 +261,7 @@ if(-not$SkipExcelRuntime){
                 if($null-ne$errs){foreach($area in @($errs.Areas)){$errorCells.Add("$($sheet.Name)!$($area.Address($false,$false))")}}
             }finally{Release-Com $errs;Release-Com $used;Release-Com $sheet}
         }
-        Add-Check 'EXCEL_NO_FORMULA_ERROR_CELLS_AFTER_RECALC' ($errorCells.Count-eq0) @($errorCells)
+        Add-Check 'EXCEL_NO_FORMULA_ERROR_CELLS_AFTER_RECALC' ($errorCells.Count -eq 0) @($errorCells)
 
         $settings=$book.Worksheets.Item('설정');$jan=$book.Worksheets.Item('1월');$march=$book.Worksheets.Item('3월')
         $settings.Range('B2').Value2=8;$settings.Range('B3').Value2=67;$settings.Range('B4').Value2=6/24.0;$settings.Range('B5').Value2=23/24.0;$settings.Range('B6').Value2='예';$settings.Range('B7').Value2=20;$settings.Range('B8').Value2=177
@@ -272,11 +277,11 @@ if(-not$SkipExcelRuntime){
         $settings.Range('B2').Value2=8;$jan.Range('C2').Value2=6/24.0;$jan.Range('D2').Value2=7/24.0
         $excel.CalculateFullRebuild();Wait-Calculation $excel
         $meal=[int]$jan.Range('F2').Value2;$ov=[double]$jan.Range('E2').Value2
-        Add-Check 'SCENARIO_HOLIDAY_MEAL_60MIN_ZERO' ($meal-eq0-and(Near $ov (1/24.0))) @{meal=$meal;overtime_days=$ov}
+        Add-Check 'SCENARIO_HOLIDAY_MEAL_60MIN_ZERO' ($meal -eq 0 -and (Near $ov (1/24.0))) @{meal=$meal;overtime_days=$ov}
 
         $jan.Range('D2').Value2=421/1440.0;$excel.CalculateFullRebuild();Wait-Calculation $excel
         $meal=[int]$jan.Range('F2').Value2;$ov=[double]$jan.Range('E2').Value2
-        Add-Check 'SCENARIO_HOLIDAY_MEAL_61MIN_ONE' ($meal-eq1-and(Near $ov (61/1440.0))) @{meal=$meal;overtime_days=$ov}
+        Add-Check 'SCENARIO_HOLIDAY_MEAL_61MIN_ONE' ($meal -eq 1 -and (Near $ov (61/1440.0))) @{meal=$meal;overtime_days=$ov}
 
         $jan.Range('E2:E32').Value2=0
         foreach($hours in @(66,67,68)){
@@ -301,7 +306,7 @@ if(-not$SkipExcelRuntime){
         try{
             [void]$excel.Run("'$($book.Name)'!RegenerateAllMonthB");$excel.CalculateFullRebuild();Wait-Calculation $excel
             $d1=[string]$jan.Range('B2').Value2;$d2=[string]$jan.Range('B3').Value2;$d3=[string]$jan.Range('B4').Value2
-            Add-Check 'MACRO_REGENERATE_2027_WEEKEND_CLASSIFICATION' ($d1-eq'평일'-and$d2-eq'휴일'-and$d3-eq'휴일') @{jan1=$d1;jan2=$d2;jan3=$d3}
+            Add-Check 'MACRO_REGENERATE_2027_WEEKEND_CLASSIFICATION' ($d1 -eq '평일' -and $d2 -eq '휴일' -and $d3 -eq '휴일') @{jan1=$d1;jan2=$d2;jan3=$d3}
         }catch{Add-Check 'MACRO_REGENERATE_2027_WEEKEND_CLASSIFICATION' $false $_.Exception.Message}
 
         $book.Close($false);Release-Com $march;$march=$null;Release-Com $jan;$jan=$null;Release-Com $settings;$settings=$null;Release-Com $book;$book=$null
@@ -310,7 +315,7 @@ if(-not$SkipExcelRuntime){
             $round=$excel.Workbooks.Open($roundPath,0,$false,$m,$m,$m,$true,$m,$m,$false,$false,$m,$false,$true,0)
             $excel.CalculateFullRebuild();Wait-Calculation $excel;$round.Save();$round.Close($false);Release-Com $round;$round=$null
             $round=$excel.Workbooks.Open($roundPath,0,$true,$m,$m,$m,$true,$m,$m,$false,$false,$m,$false,$true,0)
-            Add-Check 'EXCEL_SAVE_CLOSE_REOPEN_ROUNDTRIP' ([int]$round.Worksheets.Count-eq14) @{worksheet_count=[int]$round.Worksheets.Count}
+            Add-Check 'EXCEL_SAVE_CLOSE_REOPEN_ROUNDTRIP' ([int]$round.Worksheets.Count -eq 14) @{worksheet_count=[int]$round.Worksheets.Count}
         }catch{Add-Check 'EXCEL_SAVE_CLOSE_REOPEN_ROUNDTRIP' $false $_.Exception.Message}
     }finally{
         if($null-ne$round){try{$round.Close($false)}catch{}}
