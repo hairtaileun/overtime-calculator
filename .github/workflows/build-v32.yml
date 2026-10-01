@@ -1,0 +1,32 @@
+name: Build v3.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - tools/build_v32.py
+      - .github/workflows/build-v32.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build and validate v3.2
+        run: python tools/build_v32.py
+      - name: Commit v3.2
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "2026초과v3.2.xlsm"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Release overtime calculator v3.2"
+          git push
