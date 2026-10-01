@@ -11,13 +11,11 @@ permissions:
 
 concurrency:
   group: overtime-v32-aho-workpc-audit-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   audit:
-    if: >-
-      ${{ github.repository == 'hairtaileun/overtime-calculator' &&
-          github.actor_id == '246975164' }}
+    if: ${{ false }}
     runs-on: [self-hosted, Windows, X64, aho, workpc, runner-01]
     timeout-minutes: 20
     steps:
