@@ -91,7 +91,8 @@ def patch_month(src, month_number):
     # Preserve old E-cell display styles. Existing E=일일초과 moves to F.
     cells={}
     for n in range(2,33):
-        if re.search(rf'<c\b[^>]*\br="E{n}"',xml): cells[n]=cell_style(xml,f"E{n}")
+        c=re.search(rf'<c\b(?=[^>]*\br="E{n}")[^>]*>(.*?)</c>',xml,re.S)
+        if c and re.search(r"<f\b",c.group(1)): cells[n]=cell_style(xml,f"E{n}")
     check(len(cells)>=28,f"month{month_number}-daily-cells-{len(cells)}")
     header_style=cell_style(xml,"E1")
     xml=replace_formula_xml(xml,True)
