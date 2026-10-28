@@ -116,8 +116,10 @@ def patch_month(src, month_number):
     if "</cols>" in xml:
         xml=xml.replace("</cols>",'<col min="5" max="5" width="11" customWidth="1"/></cols>',1)
     # Rebuild the daily recognized-overtime formula (9h duty + editable exclusion).
+    patched=0
     for n,style in sorted(cells.items()):
         p=rf'(<c\b(?=[^>]*\br="F{n}")[^>]*>)(.*?)(</c>)'
+        if not re.search(p,xml,flags=re.S): continue
         def change(m):
             content=m.group(2)
             formula=html.escape(daily_formula(n),quote=False)
@@ -125,14 +127,11 @@ def patch_month(src, month_number):
             check(num==1,f"daily-formula-{month_number}-{n}")
             content=re.sub(r'<v>.*?</v>','<v></v>',content,flags=re.S)
             return m.group(1)+content+m.group(3)
-        if month_number==2 and n==31:
-            print("DEBUG_ORIGINAL_F31",re.findall(r'.{0,90}r="F31".{0,280}',xml)[:2])
-            print("DEBUG_ORIGINAL_E31",re.findall(r'.{0,90}r="E31".{0,280}',xml)[:2])
-            print("DEBUG_MATCH",bool(re.search(p,xml,flags=re.S)),p)
         xml,nrepl=re.subn(p,change,xml,count=1,flags=re.S)
         check(nrepl==1,f"daily-patch-{month_number}-{n}")
         new=f'<c r="E{n}"{stylize(style)}><f>IF($B{n}="평일",TIME(1,0,0),0)</f><v></v></c>'
         xml=add_cell_before(xml,f"F{n}",new)
+        patched+=1
     head=f'<c r="E1"{stylize(header_style)} t="inlineStr"><is><t>제외시간</t></is></c>'
     xml=add_cell_before(xml,"F1",head)
     # Set the new E column to time entry with editable minutes where possible.
@@ -159,7 +158,7 @@ def patch_month(src, month_number):
             xml,nrepl=re.subn(pat,add,xml,count=1,flags=re.S)
             check(nrepl==1,f"quarter-row-{month_number}-{row}")
     # dimension extends for the inserted column and new quarterly meal panel.
-    return xml.encode("utf-8"),len(cells)
+    return xml.encode("utf-8"),patched
 
 def patch_settings(data):
     xml=data.decode("utf-8")
