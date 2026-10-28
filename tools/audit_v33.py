@@ -75,13 +75,13 @@ def main():
                 need("설정!$B$8" in formula(d["M1"]),f"{m}-hours-quarter-cap-preserved")
                 for row in range(1,8):
                     need(formula(d[f"M{row}"]).startswith('IF(설정!$B$10="예","",'),f"{m}-quarter-hours-unused-if-field-{row}")
-                need(content(d["L8"],shared)=="월상한시간",f"{m}-quarter-month-cap-visible-label")
-                cap=formula(d["M8"])
+                need(content(d["L17"],shared)=="월상한시간",f"{m}-quarter-month-cap-visible-label")
+                cap=formula(d["M17"])
                 need('IF(설정!$B$10="예"' in cap and "설정!$B$3" in cap and "설정!$B$8" in cap and "SUM(M2:M3)" in cap,f"{m}-quarter-month-cap-field-or-remaining")
-                need(formula(d[f"F{summary+1}"])==f"MAX(0,$M$8-F{summary})",f"{m}-monthly-cap-remaining")
-                need(formula(d[f"F{summary+2}"])==f"MAX(0,F{summary}-$M$8)",f"{m}-monthly-cap-excess")
+                need(formula(d[f"F{summary+1}"])==f"MAX(0,$M$17-F{summary})",f"{m}-monthly-cap-remaining")
+                need(formula(d[f"F{summary+2}"])==f"MAX(0,F{summary}-$M$17)",f"{m}-monthly-cap-excess")
                 need("설정!$B$10" in formula(d["M16"]) and content(d["L16"],shared)=="분기초근 적용",f"{m}-inactive-indicator")
-                cfs=[c for c in doc.iter() if c.tag.rsplit("}",1)[-1]=="conditionalFormatting" and c.attrib.get("sqref")=="L1:M7"]
+                cfs=[c for c in doc.iter() if c.tag.rsplit("}",1)[-1]=="conditionalFormatting" and c.attrib.get("sqref")=="L1:M8"]
                 need(len(cfs)==1,f"{m}-quarter-conditional-grayscale-panel")
                 rules=[p for p in cfs[0] if p.tag.rsplit("}",1)[-1]=="cfRule"]
                 need(len(rules)==1 and int(rules[0].attrib["dxfId"])==grayscale_id and '$M$16="미사용(현업)"' in "".join(rules[0].itertext()),f"{m}-quarter-gray-conditional-rule")
