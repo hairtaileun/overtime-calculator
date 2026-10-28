@@ -96,6 +96,12 @@ def prepare(target: Path,mode: str) -> None:
             xml=rewrite_cell(xml,"B4",'<is><t>휴일</t></is>')
             xml=rewrite_cell(xml,"C4",'<v>0.416666666666667</v>')
             xml=rewrite_cell(xml,"D4",'<v>0.625</v>')
+        if m==3:
+            root=ET.fromstring(xml)
+            found={c.attrib["r"]:c for c in root.findall(".//m:sheetData/m:row/m:c",MAIN_NS)}
+            print("PREPARED_MARCH",[(k,found.get(k).attrib if k in found else None,
+                  found[k].find("m:f",MAIN_NS).text if k in found and found[k].find("m:f",MAIN_NS) is not None else None)
+                  for k in ("B2","C2","D2","E2","F2","B3","C3","D3","E3","F3","E4","F4","F5")],flush=True)
         parts[part]=xml.encode("utf-8")
     target.parent.mkdir(parents=True,exist_ok=True)
     with zipfile.ZipFile(target,"w") as z:
@@ -115,7 +121,7 @@ def get_cell(path: Path,sheet_number: int,ref: str):
     with zipfile.ZipFile(path) as z:
         root=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
         c=root.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',MAIN_NS)
-        if c is None:raise AssertionError(f"No cell {sheet_number}!{ref}")
+        if c is None:return None
         v=c.find("m:v",MAIN_NS)
         if v is not None and v.text is not None:
             if c.get("t") in ("str","inlineStr","s"):return v.text
