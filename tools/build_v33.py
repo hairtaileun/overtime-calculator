@@ -179,7 +179,7 @@ def patch_month(src, month_number):
                     blank=rf'<c\b(?=[^>]*\br="{ref}")[^>]*/>'
                     content,n=re.subn(blank,lambda _:cell,content,count=1)
                     if not n:
-                        check(not re.search(rf'<c\b(?=[^>]*\br="{ref}"',content),f"unused-{ref}")
+                        check(not re.search(rf'<c\b(?=[^>]*\br="{ref}")',content),f"unused-{ref}")
                         content+=cell
                 return m.group(1)+content+m.group(3)
             xml,n=re.subn(pat,add_status,xml,count=1,flags=re.S)
