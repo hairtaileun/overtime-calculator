@@ -143,17 +143,18 @@ def patch_month(src, month_number):
         check(len(mo)==3,"quarter-months")
         sty_label=cell_style(xml,"L1")
         sty_value=cell_style(xml,"M1")
-        for row in range(1,8):
-            if row==1: label="분기급량상한";formula="MAX(0,VALUE(설정!$B$9))"
-            elif row in (2,3,4): label=mo[row-2];formula=f"'{label}'!$H$33"
-            elif row==5: label="분기급량합계";formula="SUM(O2:O4)"
-            elif row==6: label="분기급량미달";formula="MAX(0,O1-O5)"
-            else: label="분기급량초과";formula="MAX(0,O5-O1)"
-            a=f'<c r="N{row}"{stylize(sty_label)} t="inlineStr"><is><t>{label}</t></is></c>'
-            b=f'<c r="O{row}"{stylize(sty_value)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
+        for offset in range(7):
+            row=offset+9
+            if offset==0: label="분기급량상한";formula="MAX(0,VALUE(설정!$B$9))"
+            elif offset in (1,2,3): label=mo[offset-1];formula=f"'{label}'!$H$33"
+            elif offset==4: label="분기급량합계";formula="SUM(M10:M12)"
+            elif offset==5: label="분기급량미달";formula="MAX(0,M9-M13)"
+            else: label="분기급량초과";formula="MAX(0,M13-M9)"
+            a=f'<c r="L{row}"{stylize(sty_label)} t="inlineStr"><is><t>{label}</t></is></c>'
+            b=f'<c r="M{row}"{stylize(sty_value)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
             pat=rf'(<row\b(?=[^>]*\br="{row}")[^>]*>)(.*?)(</row>)'
             def add(m):
-                check(not re.search(r'<c\b[^>]*\br="[NO]'+str(row)+r'"',m.group(2)),"quarter-space")
+                check(not re.search(r'<c\b[^>]*\br="[LM]'+str(row)+r'"',m.group(2)),"quarter-space")
                 return m.group(1)+m.group(2)+a+b+m.group(3)
             xml,nrepl=re.subn(pat,add,xml,count=1,flags=re.S)
             check(nrepl==1,f"quarter-row-{month_number}-{row}")
@@ -232,8 +233,8 @@ def main():
                     check(ef is not None and ff is not None and "$E"+str(n) in ff.text,f"month-{month}-row-{n}-editable-exclusion")
                     check("TIME(10,0,0)" not in ff.text,"no-fixed-10h-deduction")
             if month in (3,6,9,12):
-                for n in range(1,8):
-                    check(f"N{n}" in cc and f"O{n}" in cc,f"quarter-{month}-meal-row-{n}")
+                for n in range(9,16):
+                    check(f"L{n}" in cc and f"M{n}" in cc,f"quarter-{month}-meal-row-{n}")
             for f in root.findall(".//x:f",NS):
                 if f.text: all_formula.append(f.text)
         check(len(all_formula)>1000,"formulas-retained")
