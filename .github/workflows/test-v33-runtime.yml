@@ -1,8 +1,8 @@
 name: Independent v3.3 numeric behavior scenarios (LibreOffice)
 on:
   push:
-    branches: [audit/v33-independent-scenarios-20261029]
-    paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml']
+    branches: [main, audit/v33-independent-scenarios-20261029]
+    paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml', '2026초과v3.3.xlsm']
   pull_request:
     paths: ['tools/test_v33_runtime.py', '.github/workflows/test-v33-runtime.yml']
 permissions:
