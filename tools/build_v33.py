@@ -139,9 +139,47 @@ def patch_month(src, month_number):
         patched+=1
     head=f'<c r="E1"{stylize(header_style)} t="inlineStr"><is><t>제외시간</t></is></c>'
     xml=add_cell_before(xml,"F1",head)
-    # Set the new E column to time entry with editable minutes where possible.
-    # Formula defaults dynamically follow weekday/holiday until manually overwritten.
-    # At the same time, maintain the full existing day-by-day formatting.
+    # Each month has BOTH a monthly ceiling and (for non-field staff) a
+    # quarterly ceiling. M18 is the monthly *recognized* time. Quarter
+    # accounting uses M18, NEVER uncapped daily totals.
+    #
+    # M17 = applied month allowance; M18 = recognized monthly hours.
+    # This forward-only chain avoids circular dependencies:
+    # M17[m] -> previous M18 -> previous M17/actual hours.
+    summary=max_days+2
+    qfirst=((month_number-1)//3)*3+1
+    prior=[f"'{k}월'!$M$18" for k in range(qfirst,month_number)]
+    prevsum="SUM("+",".join(prior)+")" if prior else "0"
+    monthly="MAX(0,VALUE(설정!$B$3))/24"
+    quarter="MAX(0,VALUE(설정!$B$8))/24"
+    remaining=f"MAX(0,{quarter}-{prevsum})"
+    cap_formula=f'IF(설정!$B$10="예",{monthly},MIN({monthly},{remaining}))'
+    recognized_formula=f"MIN(MAX(0,F{summary}),M17)"
+    for sr,expr in ((summary+1,f"MAX(0,$M$17-F{summary})"),
+                    (summary+2,f"MAX(0,F{summary}-$M$17)")):
+        fp=rf'(<c\\b(?=[^>]*\\br="F{sr}")[^>]*>.*?<f\\b[^>]*>)(.*?)(</f>)'
+        xml,n=re.subn(fp,lambda mt:mt.group(1)+expr+mt.group(3),xml,count=1,flags=re.S)
+        check(n==1,f"month-{month_number}-applied-dual-cap-summary-F{sr}")
+    sty_label=cell_style(xml,"L1")
+    sty_time=cell_style(xml,f"F{summary}")
+    for row,caption,formula in ((17,"월상한시간",cap_formula),
+                                (18,"월인정시간",recognized_formula)):
+        lc=f'<c r="L{row}"{stylize(sty_label)} t="inlineStr"><is><t>{caption}</t></is></c>'
+        mc=f'<c r="M{row}"{stylize(sty_time)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
+        pat=rf'(<row\\b(?=[^>]*\\br="{row}")[^>]*>)(.*?)(</row>)'
+        def add_month_cap(mt):
+            content=mt.group(2)
+            for col,newcell in (("L",lc),("M",mc)):
+                ref=f"{col}{row}"
+                blank=rf'<c\\b(?=[^>]*\\br="{ref}")[^>]*/>'
+                content,n=re.subn(blank,lambda _:newcell,content,count=1)
+                if not n:
+                    check(not re.search(rf'<c\\b(?=[^>]*\\br="{ref}")',content),f"dual-cap-no-overwrite-{month_number}-{ref}")
+                    content+=newcell
+            return mt.group(1)+content+mt.group(3)
+        xml,n=re.subn(pat,add_month_cap,xml,count=1,flags=re.S)
+        check(n==1,f"month-{month_number}-dual-cap-row-{row}")
+    # Formula defaults dynamically follow weekday/holiday until overwritten.
     if month_number in (3,6,9,12):
         i=month_number-3
         mo=MONTHS[i:i+3]
@@ -149,25 +187,20 @@ def patch_month(src, month_number):
         sty_label=cell_style(xml,"L1")
         sty_value=cell_style(xml,"M1")
         sty_time=cell_style(xml,"M6")
-        # Deactivate the quarterly overtime calculation for field-duty staff.
+        # Quarter panel displays only recognized (monthly-capped) hours.
+        for qrow,mon in enumerate(mo,start=2):
+            fp=rf'(<c\\b(?=[^>]*\\br="M{qrow}")[^>]*>.*?<f\\b[^>]*>)(.*?)(</f>)'
+            value=f"'{mon}'!$M$18"
+            xml,n=re.subn(fp,lambda mt:mt.group(1)+value+mt.group(3),xml,count=1,flags=re.S)
+            check(n==1,f"quarter-{month_number}-recognized-month-{mon}")
+        # Disable quarterly hour panel for field workers without deactivating meals.
         for qrow in range(1,8):
-            fp=rf'(<c\b(?=[^>]*\br="M{qrow}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
-            def disabled(m):
-                return m.group(1)+'IF(설정!$B$10="예","",'+m.group(2)+')'+m.group(3)
+            fp=rf'(<c\\b(?=[^>]*\\br="M{qrow}")[^>]*>.*?<f\\b[^>]*>)(.*?)(</f>)'
+            def disabled(mt):
+                return mt.group(1)+'IF(설정!$B$10="예","",'+mt.group(2)+')'+mt.group(3)
             xml,n=re.subn(fp,disabled,xml,count=1,flags=re.S)
             check(n==1,f"quarter-{month_number}-inactive-hours-M{qrow}")
-        # March/June/September/December use remaining quarter hours in non-field mode.
-        cap_formula='IF(설정!$B$10="예",MAX(0,VALUE(설정!$B$3))/24,MAX(0,VALUE(설정!$B$8)/24-SUM(M2:M3)))'
-        summary=(29 if month_number==2 else (30 if month_number in (4,6,9,11) else 31))+2
-        for summary_row,expr in ((summary+1,f"MAX(0,$M$17-F{summary})"),
-                                  (summary+2,f"MAX(0,F{summary}-$M$17)")):
-            fp=rf'(<c\b(?=[^>]*\br="F{summary_row}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
-            xml,n=re.subn(fp,lambda m:m.group(1)+expr+m.group(3),xml,count=1,flags=re.S)
-            check(n==1,f"quarter-{month_number}-monthly-cap-summary-F{summary_row}")
-        special={
-            17:(("월상한시간",sty_label),(cap_formula,sty_time)),
-            16:(("분기초근 적용",sty_label),('IF(설정!$B$10="예","미사용(현업)","사용(비현업)")',sty_value)),
-        }
+        special={16:(("분기초근 적용",sty_label),('IF(설정!$B$10="예","미사용(현업)","사용(비현업)")',sty_value))}
         for row,((caption,caption_style),(formula,formula_style)) in special.items():
             lc=f'<c r="L{row}"{stylize(caption_style)} t="inlineStr"><is><t>{caption}</t></is></c>'
             mc=f'<c r="M{row}"{stylize(formula_style)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
@@ -333,6 +366,10 @@ def main():
                     ff=cc[f"F{n}"].find("x:f",NS)
                     check(ef is not None and ff is not None and "$E"+str(n) in ff.text,f"month-{month}-row-{n}-editable-exclusion")
                     check("TIME(10,0,0)" not in ff.text,"no-fixed-10h-deduction")
+            check("설정!$B$10" in cc["M17"].find("x:f",NS).text,f"month-{month}-dual-cap-switch")
+            check("설정!$B$3" in cc["M17"].find("x:f",NS).text,f"month-{month}-67-hour-cap")
+            check("설정!$B$8" in cc["M17"].find("x:f",NS).text,f"month-{month}-quarter-hour-cap")
+            check("M17" in cc["M18"].find("x:f",NS).text,f"month-{month}-recognized-hours-helper")
             if month in (3,6,9,12):
                 check("설정!$B$10" in cc["M17"].find("x:f",NS).text,f"quarter-{month}-cap-switch")
                 check("설정!$B$10" in cc["M16"].find("x:f",NS).text,f"quarter-{month}-grayscale-status")
