@@ -157,8 +157,19 @@ def patch_month(src, month_number):
     recognized_formula=f"MIN(MAX(0,F{summary}),M17)"
     for sr,expr in ((summary+1,f"MAX(0,$M$17-F{summary})"),
                     (summary+2,f"MAX(0,F{summary}-$M$17)")):
-        fp=rf'(<c\\b(?=[^>]*\\br="F{sr}")[^>]*>.*?<f\\b[^>]*>)(.*?)(</f>)'
-        xml,n=re.subn(fp,lambda mt:mt.group(1)+expr+mt.group(3),xml,count=1,flags=re.S)
+        # Legacy months may encode summary formulas as <f t="shared" .../>
+        # rather than ordinary <f>...</f>; produce explicit standalone formulas.
+        fp=rf'(<c\b(?=[^>]*\br="F{sr}")[^>]*>)(.*?)(</c>)'
+        def new_summary(mt):
+            interior=mt.group(2)
+            if re.search(r'<f\b[^>]*/>',interior):
+                interior,nf=re.subn(r'<f\b[^>]*/>',lambda _:f'<f>{expr}</f>',interior,count=1)
+            else:
+                interior,nf=re.subn(r'<f\b[^>]*>.*?</f>',lambda _:f'<f>{expr}</f>',interior,count=1,flags=re.S)
+            check(nf==1,f"dual-cap-summary-formula-{month_number}-F{sr}")
+            interior=re.sub(r'<v>.*?</v>','<v></v>',interior,count=1,flags=re.S)
+            return mt.group(1)+interior+mt.group(3)
+        xml,n=re.subn(fp,new_summary,xml,count=1,flags=re.S)
         check(n==1,f"month-{month_number}-applied-dual-cap-summary-F{sr}")
     sty_label=cell_style(xml,"L1")
     sty_time=cell_style(xml,f"F{summary}")
@@ -166,15 +177,15 @@ def patch_month(src, month_number):
                                 (18,"월인정시간",recognized_formula)):
         lc=f'<c r="L{row}"{stylize(sty_label)} t="inlineStr"><is><t>{caption}</t></is></c>'
         mc=f'<c r="M{row}"{stylize(sty_time)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
-        pat=rf'(<row\\b(?=[^>]*\\br="{row}")[^>]*>)(.*?)(</row>)'
+        pat=rf'(<row\b(?=[^>]*\br="{row}")[^>]*>)(.*?)(</row>)'
         def add_month_cap(mt):
             content=mt.group(2)
             for col,newcell in (("L",lc),("M",mc)):
                 ref=f"{col}{row}"
-                blank=rf'<c\\b(?=[^>]*\\br="{ref}")[^>]*/>'
+                blank=rf'<c\b(?=[^>]*\br="{ref}")[^>]*/>'
                 content,n=re.subn(blank,lambda _:newcell,content,count=1)
                 if not n:
-                    check(not re.search(rf'<c\\b(?=[^>]*\\br="{ref}")',content),f"dual-cap-no-overwrite-{month_number}-{ref}")
+                    check(not re.search(rf'<c\b(?=[^>]*\br="{ref}")',content),f"dual-cap-no-overwrite-{month_number}-{ref}")
                     content+=newcell
             return mt.group(1)+content+mt.group(3)
         xml,n=re.subn(pat,add_month_cap,xml,count=1,flags=re.S)
@@ -189,13 +200,13 @@ def patch_month(src, month_number):
         sty_time=cell_style(xml,"M6")
         # Quarter panel displays only recognized (monthly-capped) hours.
         for qrow,mon in enumerate(mo,start=2):
-            fp=rf'(<c\\b(?=[^>]*\\br="M{qrow}")[^>]*>.*?<f\\b[^>]*>)(.*?)(</f>)'
+            fp=rf'(<c\b(?=[^>]*\br="M{qrow}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
             value=f"'{mon}'!$M$18"
             xml,n=re.subn(fp,lambda mt:mt.group(1)+value+mt.group(3),xml,count=1,flags=re.S)
             check(n==1,f"quarter-{month_number}-recognized-month-{mon}")
         # Disable quarterly hour panel for field workers without deactivating meals.
         for qrow in range(1,8):
-            fp=rf'(<c\\b(?=[^>]*\\br="M{qrow}")[^>]*>.*?<f\\b[^>]*>)(.*?)(</f>)'
+            fp=rf'(<c\b(?=[^>]*\br="M{qrow}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
             def disabled(mt):
                 return mt.group(1)+'IF(설정!$B$10="예","",'+mt.group(2)+')'+mt.group(3)
             xml,n=re.subn(fp,disabled,xml,count=1,flags=re.S)
