@@ -148,6 +148,50 @@ def patch_month(src, month_number):
         check(len(mo)==3,"quarter-months")
         sty_label=cell_style(xml,"L1")
         sty_value=cell_style(xml,"M1")
+        sty_time=cell_style(xml,"M6")
+        # Deactivate the quarterly overtime calculation for field-duty staff.
+        for qrow in range(1,8):
+            fp=rf'(<c\b(?=[^>]*\br="M{qrow}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
+            def disabled(m):
+                return m.group(1)+'IF(설정!$B$10="예","",'+m.group(2)+')'+m.group(3)
+            xml,n=re.subn(fp,disabled,xml,count=1,flags=re.S)
+            check(n==1,f"quarter-{month_number}-inactive-hours-M{qrow}")
+        # March/June/September/December use remaining quarter hours in non-field mode.
+        cap_formula='IF(설정!$B$10="예",MAX(0,VALUE(설정!$B$3))/24,MAX(0,VALUE(설정!$B$8)/24-SUM(M2:M3)))'
+        summary=(29 if month_number==2 else (30 if month_number in (4,6,9,11) else 31))+2
+        for summary_row,expr in ((summary+1,f"MAX(0,$M$8-F{summary})"),
+                                  (summary+2,f"MAX(0,F{summary}-$M$8)")):
+            fp=rf'(<c\b(?=[^>]*\br="F{summary_row}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
+            xml,n=re.subn(fp,lambda m:m.group(1)+expr+m.group(3),xml,count=1,flags=re.S)
+            check(n==1,f"quarter-{month_number}-monthly-cap-summary-F{summary_row}")
+        special={
+            8:(("월상한시간",sty_label),(cap_formula,sty_time)),
+            16:(("분기초근 적용",sty_label),('IF(설정!$B$10="예","미사용(현업)","사용(비현업)")',sty_value)),
+        }
+        for row,((caption,caption_style),(formula,formula_style)) in special.items():
+            lc=f'<c r="L{row}"{stylize(caption_style)} t="inlineStr"><is><t>{caption}</t></is></c>'
+            mc=f'<c r="M{row}"{stylize(formula_style)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
+            pat=rf'(<row\b(?=[^>]*\br="{row}")[^>]*>)(.*?)(</row>)'
+            def add_status(m):
+                content=m.group(2)
+                for col,cell in (("L",lc),("M",mc)):
+                    ref=f"{col}{row}"
+                    blank=rf'<c\b(?=[^>]*\br="{ref}")[^>]*/>'
+                    content,n=re.subn(blank,lambda _:cell,content,count=1)
+                    if not n:
+                        check(not re.search(rf'<c\b(?=[^>]*\br="{ref}"',content),f"unused-{ref}")
+                        content+=cell
+                return m.group(1)+content+m.group(3)
+            xml,n=re.subn(pat,add_status,xml,count=1,flags=re.S)
+            check(n==1,f"quarter-{month_number}-status-row-{row}")
+        rule_priority=max([int(p) for p in re.findall(r'<cfRule\b[^>]*\bpriority="(\d+)"',xml)] or [0])+1
+        cf=f'<conditionalFormatting sqref="L1:M7"><cfRule type="expression" dxfId="__GREY_DXF__" priority="{rule_priority}"><formula>$M$16="미사용(현업)"</formula></cfRule></conditionalFormatting>'
+        if '<dataValidations' in xml:
+            xml=xml.replace('<dataValidations',cf+'<dataValidations',1)
+        elif '<pageMargins' in xml:
+            xml=xml.replace('<pageMargins',cf+'<pageMargins',1)
+        else: raise AssertionError(f"quarter-{month_number}-CF-insertion-point")
+        check("__GREY_DXF__" in xml,f"quarter-{month_number}-grayscale-rule")
         for offset in range(7):
             row=offset+9
             if offset==0: label="분기급량상한";formula="MAX(0,VALUE(설정!$B$9))"
