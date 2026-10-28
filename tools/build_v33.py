@@ -125,6 +125,10 @@ def patch_month(src, month_number):
             check(num==1,f"daily-formula-{month_number}-{n}")
             content=re.sub(r'<v>.*?</v>','<v></v>',content,flags=re.S)
             return m.group(1)+content+m.group(3)
+        if month_number==2 and n==31:
+            print("DEBUG_ORIGINAL_F31",re.findall(r'.{0,90}r="F31".{0,280}',xml)[:2])
+            print("DEBUG_ORIGINAL_E31",re.findall(r'.{0,90}r="E31".{0,280}',xml)[:2])
+            print("DEBUG_MATCH",bool(re.search(p,xml,flags=re.S)),p)
         xml,nrepl=re.subn(p,change,xml,count=1,flags=re.S)
         check(nrepl==1,f"daily-patch-{month_number}-{n}")
         new=f'<c r="E{n}"{stylize(style)}><f>IF($B{n}="평일",TIME(1,0,0),0)</f><v></v></c>'
