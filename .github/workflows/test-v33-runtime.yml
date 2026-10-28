@@ -2,7 +2,7 @@ name: Independent v3.3 numeric behavior scenarios (LibreOffice)
 on:
   push:
     branches: [audit/v33-independent-scenarios-20261029]
-    paths: ['tools/test_v33_runtime.py', '.github/workflows/test-v33-runtime.yml']
+    paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml']
   pull_request:
     paths: ['tools/test_v33_runtime.py', '.github/workflows/test-v33-runtime.yml']
 permissions:
@@ -18,7 +18,7 @@ jobs:
         run: |
           if ! command -v libreoffice >/dev/null; then
             sudo apt-get update -qq
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-calc >/tmp/libreoffice-install.log 2>&1 || { tail -50 /tmp/libreoffice-install.log; exit 1; }
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-calc python3-uno >/tmp/libreoffice-install.log 2>&1 || { tail -50 /tmp/libreoffice-install.log; exit 1; }
           fi
           libreoffice --version
       - name: Prepare separate nonfield and field scenario copies
@@ -29,7 +29,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/v33_recalculated"
-          timeout 240 libreoffice -env:UserInstallation=file://$RUNNER_TEMP/lo_v33_audit --headless --convert-to xlsx --outdir "$RUNNER_TEMP/v33_recalculated" "$RUNNER_TEMP/v33_scenarios/nonfield.xlsm" "$RUNNER_TEMP/v33_scenarios/field.xlsm"
+          libreoffice -env:UserInstallation=file://$RUNNER_TEMP/lo_v33_audit --headless --norestore --nodefault --nofirststartwizard --accept="socket,host=127.0.0.1,port=20269;urp;StarOffice.ServiceManager" >/tmp/v33_uno_service.log 2>&1 &
+          LO_PID=$!
+          trap 'kill "$LO_PID" 2>/dev/null || true' EXIT
+          timeout 240 /usr/bin/python3 tools/test_v33_uno_recalc.py "$RUNNER_TEMP/v33_scenarios" "$RUNNER_TEMP/v33_recalculated"
           test -s "$RUNNER_TEMP/v33_recalculated/nonfield.xlsx"
           test -s "$RUNNER_TEMP/v33_recalculated/field.xlsx"
       - name: Verify 4 quarters across both employment modes and daily time exclusions
