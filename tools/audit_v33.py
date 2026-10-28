@@ -93,7 +93,7 @@ def main():
                 # Quarter panel must use each month's capped recognition
                 # rather than raw daily input totals, including first and second month.
                 for pidx,ref_month in enumerate(range(m-2,m+1),start=2):
-                    expected=f"IF(설정!$B$10=\\"예\\",\\"\\",'"+str(ref_month)+"월'!$M$18)"
+                    expected='IF(설정!$B$10="예","",' + f"'{ref_month}월'!$M$18)"
                     need(formula(d[f"M{pidx}"])==expected,
                          f"{m}-quarter-counts-recognized-month-{ref_month}")
                 need("설정!$B$10" in formula(d["M16"]) and content(d["L16"],shared)=="분기초근 적용",f"{m}-inactive-indicator")
