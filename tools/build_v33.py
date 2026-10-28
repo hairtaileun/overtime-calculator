@@ -154,6 +154,8 @@ def patch_month(src, month_number):
             b=f'<c r="M{row}"{stylize(sty_value)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
             pat=rf'(<row\b(?=[^>]*\br="{row}")[^>]*>)(.*?)(</row>)'
             def add(m):
+                if re.search(r'<c\b[^>]*\br="[LM]'+str(row)+r'"',m.group(2)):
+                    print("CONFLICT",month_number,row,re.findall(r'<c\b(?=[^>]*\br="[LM]'+str(row)+r'")[^>]*(?:/>|>.*?</c>)',m.group(2),flags=re.S)[:3])
                 check(not re.search(r'<c\b[^>]*\br="[LM]'+str(row)+r'"',m.group(2)),"quarter-space")
                 return m.group(1)+m.group(2)+a+b+m.group(3)
             xml,nrepl=re.subn(pat,add,xml,count=1,flags=re.S)
