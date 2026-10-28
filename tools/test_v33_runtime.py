@@ -1,197 +1,93 @@
 #!/usr/bin/env python3
-"""Independent v3.3 behavior regression. Never save/modify the release artifact.
+"""Read-only, independent numeric regression of the official v3.3 workbook.
 
-Create two isolated scenario copies, recalculate using LibreOffice (on copies),
-and assert numeric results independently of v3.3's source builder/auditor.
-LibreOffice is a cross-engine behavioral check, not Microsoft Excel COM.
+The paired UNO driver loads and edits official XLSM in memory without saving
+it. This verifier reads its temporary recalculated XLSX output only.
 """
 from __future__ import annotations
-import argparse, math, re, sys, zipfile
+import argparse,hashlib,math,zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
 BASE=Path("2026초과v3.3.xlsm")
-MAIN_NS={"m":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
-MONTH_DAY={m:(29 if m==2 else 30 if m in (4,6,9,11) else 31) for m in range(1,13)}
+EXPECTED_SHA="604684b58bb0c9676d987816ad466fbf6aa10fd74b68de1c791f1138fce4f7a5"
+NS={"m":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+DAYS={m:29 if m==2 else 30 if m in (4,6,9,11) else 31 for m in range(1,13)}
 
-def rewrite_cell(xml: str, ref: str, inside: str) -> str:
-    p=rf'<c\b(?=[^>]*\br="{re.escape(ref)}")[^>]*(?:/>|>.*?</c>)'
-    def sub(m):
-        opening=m.group(0).split(">",1)[0].rstrip("/")
-        opening=re.sub(r'\s+t="[^"]+"','',opening)
-        if inside.startswith("<is>"):opening+=' t="inlineStr"'
-        return opening+">"+inside+"</c>"
-    xml,count=re.subn(p,sub,xml,count=1,flags=re.S)
-    if count==0:
-        # The template intentionally omits many empty C/D input cells.
-        column,rownum=re.fullmatch(r'([A-Z]+)([0-9]+)',ref).groups()
-        new=f'<c r="{ref}"'+(' t="inlineStr"' if inside.startswith("<is>") else '')+'>'+inside+'</c>'
-        rp=rf'(<row\b(?=[^>]*\br="{rownum}")[^>]*>)(.*?)(</row>)'
-        def insert(m):
-            body=m.group(2)
-            def index(col):
-                out=0
-                for char in col:out=out*26+ord(char)-64
-                return out
-            for c in re.finditer(rf'<c\b[^>]*\br="([A-Z]+){rownum}"',body):
-                if index(c.group(1))>index(column):
-                    body=body[:c.start()]+new+body[c.start():]
-                    break
-            else:body+=new
-            return m.group(1)+body+m.group(3)
-        xml,n=re.subn(rp,insert,xml,count=1,flags=re.S)
-        if n!=1:raise AssertionError("Missing row for "+ref)
-    elif count!=1:raise AssertionError("Duplicated cell "+ref)
-    return xml
-
-def numeric(xml,ref,value):
-    return rewrite_cell(xml,ref,f"<v>{value:.14g}</v>")
-
-def prepare(target: Path,mode: str) -> None:
-    assert mode in ("예","아니오")
-    assert BASE.is_file(),BASE
-    with zipfile.ZipFile(BASE) as z:
-        parts={i.filename:z.read(i.filename) for i in z.infolist()}
-        meta=z.infolist()
-    settings=parts["xl/worksheets/sheet1.xml"].decode("utf-8")
-    settings=rewrite_cell(settings,"B10",f"<is><t>{mode}</t></is>")
-    parts["xl/worksheets/sheet1.xml"]=settings.encode("utf-8")
-    for m in range(1,13):
-        part=f"xl/worksheets/sheet{m+2}.xml"
-        xml=parts[part].decode("utf-8")
-        summary=MONTH_DAY[m]+2
-        # 100h then 60h, closing month alternating between 15h and 30h.
-        quarter_position=(m-1)%3
-        hours=(100,60,15 if ((m-1)//3)%2==0 else 30)[quarter_position]
-        # Populate actual daily rows so both monthly SUM and independent
-        # over-cap formulas see the same total. Overwriting only the monthly
-        # summary would violate the source's original SUM invariants.
-        for daily_row in range(2,summary):
-            if m==3 and daily_row in (2,3,4):
-                continue  # Retain these genuine daily formulas for exclusion tests.
-            xml=numeric(xml,f"F{daily_row}",0)
-        if m==3:
-            # Original daily formulas on rows 2/3/4 will total 11.5 hours.
-            assert hours==15
-            xml=numeric(xml,"F5",3.5/24)
-        else:
-            remaining=hours
-            daily_row=2
-            while remaining:
-                chunk=min(8,remaining)
-                xml=numeric(xml,f"F{daily_row}",chunk/24)
-                daily_row+=1
-                remaining-=chunk
-        # Every month has 25 recognized meals (a quarter totals 75 > 60).
-        xml=numeric(xml,f"H{summary}",25)
-        if m==3:
-            # Validate three distinct exclusion cases independently of total.
-            xml=rewrite_cell(xml,"B2",'<is><t>평일</t></is>')
-            xml=rewrite_cell(xml,"C2",'<v>0.25</v>') # 06:00
-            xml=rewrite_cell(xml,"D2",'<v>0.791666666666667</v>') # 19:00
-            xml=rewrite_cell(xml,"B3",'<is><t>휴일</t></is>')
-            xml=rewrite_cell(xml,"C3",'<v>0.416666666666667</v>') # 10:00
-            xml=rewrite_cell(xml,"D3",'<v>0.625</v>') # 15:00
-            xml=rewrite_cell(xml,"E3",'<v>0.0625</v>') # manually 1:30 excluded
-            xml=rewrite_cell(xml,"B4",'<is><t>휴일</t></is>')
-            xml=rewrite_cell(xml,"C4",'<v>0.416666666666667</v>')
-            xml=rewrite_cell(xml,"D4",'<v>0.625</v>')
-        if m==3:
-            root=ET.fromstring(xml)
-            found={c.attrib["r"]:c for c in root.findall(".//m:sheetData/m:row/m:c",MAIN_NS)}
-            print("PREPARED_MARCH",[(k,found.get(k).attrib if k in found else None,
-                  found[k].find("m:f",MAIN_NS).text if k in found and found[k].find("m:f",MAIN_NS) is not None else None)
-                  for k in ("B2","C2","D2","E2","F2","B3","C3","D3","E3","F3","E4","F4","F5")],flush=True)
-        parts[part]=xml.encode("utf-8")
-    target.parent.mkdir(parents=True,exist_ok=True)
-    with zipfile.ZipFile(target,"w") as z:
-        for info in meta:
-            z.writestr(info,parts[info.filename])
-    print("SCENARIO_PREPARED",target,mode)
-
-def get_formula(path: Path,sheet_number: int,ref: str):
+def cell(path: Path,month: int,ref: str):
+    sheet_number=month+2 if month else 1
     with zipfile.ZipFile(path) as z:
-        root=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
-        c=root.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',MAIN_NS)
-        if c is None:return None
-        f=c.find("m:f",MAIN_NS)
-        return f.text if f is not None else None
-
-def get_cell(path: Path,sheet_number: int,ref: str):
-    with zipfile.ZipFile(path) as z:
-        root=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
-        c=root.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',MAIN_NS)
-        if c is None:return None
-        v=c.find("m:v",MAIN_NS)
+        xml=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
+        el=xml.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',NS)
+        if el is None:return None
+        v=el.find("m:v",NS)
         if v is not None and v.text is not None:
-            if c.get("t") in ("str","inlineStr","s"):return v.text
+            if el.get("t") in ("str","s","inlineStr"):return v.text
             try:return float(v.text)
             except ValueError:return v.text
-        i=c.find("m:is",MAIN_NS)
+        i=el.find("m:is",NS)
         if i is not None:return "".join(i.itertext())
         return ""
 
-def near(got,expected,label,tol=1e-7):
-    if not isinstance(got,(int,float)) or not math.isclose(got,expected,rel_tol=0,abs_tol=tol):
-        raise AssertionError(f"{label}: expected {expected!r}, got {got!r}")
-    print("SCENARIO_PASS",label,round(got,10))
+def near(actual,expected,label):
+    if not isinstance(actual,(int,float)) or not math.isclose(actual,expected,rel_tol=0,abs_tol=1e-7):
+        raise AssertionError(f"{label} expected={expected}, actual={actual!r}")
+    print("SCENARIO_PASS",label,round(actual,10))
 
 def verify(folder: Path):
+    assert BASE.is_file(),"original XLSM is missing"
+    digest=hashlib.sha256(BASE.read_bytes()).hexdigest()
+    assert digest==EXPECTED_SHA,(digest,EXPECTED_SHA)
+    print("PASS_RELEASE_BINARY_UNCHANGED",digest)
     for mode in ("아니오","예"):
         stem="nonfield" if mode=="아니오" else "field"
-        file=folder/f"{stem}.xlsx"
-        assert file.is_file(),file
-        print("DIAGNOSTIC",mode, "jan_total_F33",get_cell(file,3,"F33"),"feb_total_F31",get_cell(file,4,"F31"))
-        print("DIAGNOSTIC_MARCH",mode,[(r,get_cell(file,5,r)) for r in ("B2","C2","D2","E2","F2","B3","C3","D3","E3","F3","B4","C4","D4","E4","F4","F5","F33","F34","F35")])
-        print("SOURCE_FORMULAS",mode,[(ref,get_formula(BASE,5,ref)) for ref in ("M1","M2","M3","M4","M5","M6","M7","M17")])
-        print("RECALC_FORMULAS",mode,[(ref,get_formula(file,5,ref)) for ref in ("M1","M2","M3","M4","M5","M6","M7","M17")])
-        for m in (3,6,9,12):
-            sheet=m+2
-            print("DIAGNOSTIC_QUARTER",mode,m,[(f"M{k}",get_cell(file,sheet,f"M{k}")) for k in (1,2,3,4,5,6,7,17)])
-            current_hours=15 if m in (3,9) else 30
-            cap=(17 if mode=="아니오" else 67)
-            summary=MONTH_DAY[m]+2
-            near(get_cell(file,sheet,"M17"),cap/24,f"{mode}-{m}month-dynamic-cap")
-            near(get_cell(file,sheet,f"F{summary+1}"),max(0,cap-current_hours)/24,f"{mode}-{m}month-under-cap")
-            near(get_cell(file,sheet,f"F{summary+2}"),max(0,current_hours-cap)/24,f"{mode}-{m}month-over-cap")
-            near(get_cell(file,sheet,"M9"),60,f"{mode}-{m}quarter-meal-cap")
-            for row in (10,11,12):near(get_cell(file,sheet,f"M{row}"),25,f"{mode}-{m}meal-month-{row}")
-            near(get_cell(file,sheet,"M13"),75,f"{mode}-{m}quarter-meal-total")
-            near(get_cell(file,sheet,"M14"),0,f"{mode}-{m}quarter-meal-under")
-            near(get_cell(file,sheet,"M15"),15,f"{mode}-{m}quarter-meal-over")
-            for row in range(1,8):
-                val=get_cell(file,sheet,f"M{row}")
-                if mode=="예":
-                    if val not in ("",None):raise AssertionError(f"Active quarterly hours in field mode {m} M{row}: {val!r}")
-                elif row<=4:
-                    expected=177 if row==1 else (100,60,current_hours)[row-2]/24
-                    near(val,expected,f"{mode}-{m}quarter-hours-{row}")
-            if mode=="아니오":
-                total=160+current_hours
-                near(get_cell(file,sheet,"M5"),total/24,f"{mode}-{m}quarter-hours-total")
-                near(get_cell(file,sheet,"M6"),max(0,177-total)/24,f"{mode}-{m}quarter-hours-under")
-                near(get_cell(file,sheet,"M7"),max(0,total-177)/24,f"{mode}-{m}quarter-hours-over")
-            print("SCENARIO_PASS",mode,m,"quarter-hour-activation")
-        # A regular month retains independent 67h monthly cap in both modes.
-        near(get_cell(file,3,"F34"),0,f"{mode}-january-monthly-under")
-        near(get_cell(file,3,"F35"),33/24,f"{mode}-january-monthly-over")
-        near(get_cell(file,4,"F32"),7/24,f"{mode}-february-monthly-under")
-        # Editable weekday and holiday exclusion formula scenarios on March.
-        near(get_cell(file,5,"E2"),1/24,f"{mode}-weekday-default-exclusion")
-        near(get_cell(file,5,"F2"),3/24,f"{mode}-weekday-net-3h")
-        near(get_cell(file,5,"E3"),1.5/24,f"{mode}-holiday-manual-exclusion")
-        near(get_cell(file,5,"F3"),3.5/24,f"{mode}-holiday-net-3.5h")
-        near(get_cell(file,5,"E4"),0,f"{mode}-holiday-default-zero-exclusion")
-        near(get_cell(file,5,"F4"),5/24,f"{mode}-holiday-default-5h")
+        p=folder/f"{stem}.xlsx"
+        assert p.is_file(),p
+        for month in (3,6,9,12):
+            current=15 if month in (3,9) else 30
+            first=200 if month==9 else 100
+            preceding=first+60
+            cap=(max(0,177-preceding) if mode=="아니오" else 67)
+            summary=DAYS[month]+2
+            near(cell(p,month,"M17"),cap/24,f"{mode}-{month}-applied-month-cap")
+            near(cell(p,month,f"F{summary+1}"),max(0,cap-current)/24,f"{mode}-{month}-monthly-under")
+            near(cell(p,month,f"F{summary+2}"),max(0,current-cap)/24,f"{mode}-{month}-monthly-over")
+            near(cell(p,month,"M9"),60,f"{mode}-{month}-quarter-meal-cap")
+            for row in (10,11,12):
+                near(cell(p,month,f"M{row}"),25,f"{mode}-{month}-recognized-meal-{row}")
+            near(cell(p,month,"M13"),75,f"{mode}-{month}-quarter-meal-total")
+            near(cell(p,month,"M14"),0,f"{mode}-{month}-quarter-meal-under")
+            near(cell(p,month,"M15"),15,f"{mode}-{month}-quarter-meal-over")
+            if mode=="예":
+                for row in range(1,8):
+                    v=cell(p,month,f"M{row}")
+                    if v not in ("",None):raise AssertionError(f"field-mode unused panel M{row}={v!r}")
+                print("SCENARIO_PASS",mode,month,"hours-panel-unused")
+            else:
+                for row,x in enumerate((177,first/24,60/24,current/24),start=1):
+                    near(cell(p,month,f"M{row}"),x,f"{mode}-{month}-quarter-hours-{row}")
+                total=preceding+current
+                near(cell(p,month,"M5"),total/24,f"{mode}-{month}-quarter-hours-total")
+                near(cell(p,month,"M6"),max(0,177-total)/24,f"{mode}-{month}-quarter-hours-under")
+                near(cell(p,month,"M7"),max(0,total-177)/24,f"{mode}-{month}-quarter-hours-over")
+        # Regular months retain standalone 67h cap regardless of employment mode.
+        near(cell(p,1,"F34"),0,f"{mode}-january-under-67")
+        near(cell(p,1,"F35"),33/24,f"{mode}-january-over-67")
+        near(cell(p,2,"F32"),7/24,f"{mode}-february-under-67")
+        # Directly edited daily input cells: weekday, holiday and override.
+        near(cell(p,3,"E2"),1/24,f"{mode}-weekday-default-1hour")
+        near(cell(p,3,"F2"),3/24,f"{mode}-weekday-net-3hours")
+        near(cell(p,3,"E3"),1.5/24,f"{mode}-holiday-exclusion-override")
+        near(cell(p,3,"F3"),3.5/24,f"{mode}-holiday-net-3.5hours")
+        near(cell(p,3,"E4"),0,f"{mode}-holiday-default-zero")
+        near(cell(p,3,"F4"),5/24,f"{mode}-holiday-net-5hours")
+        # 27 daily meals: 25 recognized, 2 above monthly cap.
+        near(cell(p,3,"H33"),25,f"{mode}-march-meal-recognized-25")
+        near(cell(p,3,"H35"),2,f"{mode}-march-meal-over-2")
     print("ALL_SCENARIO_TESTS_PASSED")
 
 if __name__=="__main__":
-    p=argparse.ArgumentParser()
-    p.add_argument("--prepare",type=Path)
-    p.add_argument("--verify",type=Path)
-    args=p.parse_args()
-    if args.prepare:
-        prepare(args.prepare/"nonfield.xlsm","아니오")
-        prepare(args.prepare/"field.xlsm","예")
-    elif args.verify:verify(args.verify)
-    else:p.error("Need --prepare or --verify")
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--verify",type=Path,required=True)
+    args=parser.parse_args()
+    verify(args.verify)
