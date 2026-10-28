@@ -171,7 +171,7 @@ def patch_month(src, month_number):
             return mt.group(1)+interior+mt.group(3)
         xml,n=re.subn(fp,new_summary,xml,count=1,flags=re.S)
         check(n==1,f"month-{month_number}-applied-dual-cap-summary-F{sr}")
-    sty_label=cell_style(xml,"L1")
+    sty_label=cell_style(xml,"L1" if month_number in (3,6,9,12) else f"D{summary}")
     sty_time=cell_style(xml,f"F{summary}")
     for row,caption,formula in ((17,"월상한시간",cap_formula),
                                 (18,"월인정시간",recognized_formula)):
