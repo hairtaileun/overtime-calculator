@@ -90,7 +90,8 @@ def patch_month(src, month_number):
     check('일일초과' not in xml or True,"monthly-byte-source-ok") # headers are stored as shared strings
     # Preserve old E-cell display styles. Existing E=일일초과 moves to F.
     cells={}
-    for n in range(2,33):
+    max_days=29 if month_number==2 else (30 if month_number in (4,6,9,11) else 31)
+    for n in range(2,max_days+2):
         opening=re.search(rf'<c\b(?=[^>]*\br="E{n}")[^>]*>',xml)
         if not opening or opening.group(0).endswith("/>"): continue
         end=xml.find("</c>",opening.end())
@@ -129,7 +130,7 @@ def patch_month(src, month_number):
             return m.group(1)+content+m.group(3)
         xml,nrepl=re.subn(p,change,xml,count=1,flags=re.S)
         check(nrepl==1,f"daily-patch-{month_number}-{n}")
-        new=f'<c r="E{n}"{stylize(style)}><f>IF($B{n}="평일",TIME(1,0,0),0)</f><v></v></c>'
+        new=f'<c r="E{n}"{stylize(style)}><f>IF($A{n}="",0,IF($B{n}="평일",TIME(1,0,0),0))</f><v></v></c>'
         xml=add_cell_before(xml,f"F{n}",new)
         patched+=1
     head=f'<c r="E1"{stylize(header_style)} t="inlineStr"><is><t>제외시간</t></is></c>'
@@ -212,7 +213,7 @@ def main():
         new,n=patch_month(originals[part],month);changed[part]=new;nday+=n
         print("MONTH_REWRITTEN_DAYS",month,n)
     print("TOTAL_REWRITTEN_DAYS",nday)
-    check(nday>=365,"all-calendar-daily-overtime-and-exclusion-formulas")
+    check(nday==366,"all-366-calendar-daily-overtime-and-exclusion-formulas")
     # The existing help string would incorrectly claim a universal fixed 1h deduction.
     ss=originals.get("xl/sharedStrings.xml")
     if ss and "1시간 공제" in ss.decode("utf-8"):
