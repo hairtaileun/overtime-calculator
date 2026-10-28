@@ -15,3 +15,30 @@ jobs:
       - uses: actions/checkout@v4
       - name: Read-only v3.3 end-to-end OOXML and reference audit
         run: python tools/audit_v33.py
+      - name: Verify desktop-compatible workbook parse without resaving VBA
+        shell: bash
+        run: |
+          python -m pip install --disable-pip-version-check --quiet openpyxl
+          python - <<'PY'
+          from openpyxl import load_workbook
+          from pathlib import Path
+          p=Path('2026초과v3.3.xlsm')
+          wb=load_workbook(p,keep_vba=True,data_only=False,read_only=False)
+          assert wb.sheetnames == ['설정','급량']+[f'{m}월' for m in range(1,13)]
+          assert wb['설정']['B10'].value == '아니오'
+          assert wb['설정']['B3'].value == 67
+          assert wb['설정']['B7'].value == 25
+          assert wb['설정']['B9'].value == 60
+          assert any('B10' in str(v.sqref) for v in wb['설정'].data_validations.dataValidation)
+          for m in range(1,13):
+              sh=wb[f'{m}월']
+              assert sh['E1'].value == '제외시간'
+              assert sh['F1'].value == '일일초과'
+              assert sh['E2'].value.startswith('=IF($A2')
+              if m in (3,6,9,12):
+                  assert '설정!$B$10' in sh['M17'].value
+                  assert '설정!$B$9' in sh['M9'].value
+                  assert any('L1:M8' in str(key.sqref) for key in sh.conditional_formatting)
+          assert wb.vba_archive is not None
+          print("PASS OPENPYXL_READ_ONLY_COMPAT 14 sheets; macro attached; switch; caps; quarterly conditional formatting")
+          PY
