@@ -100,13 +100,19 @@ def patch_month(src, month_number):
             cells[n]=cell_style(xml,f"E{n}")
     check(len(cells)>=28,f"month{month_number}-daily-cells-{len(cells)}")
     header_style=cell_style(xml,"E1")
+    if month_number==1:
+        print("BUILD_STAGE_INITIAL_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     xml=replace_formula_xml(xml,True)
     # Move all pre-existing E.. cells right, preserving each cell's children and style.
     xml=re.sub(r'(<c\b[^>]*?\br=")([A-Z]{1,3})([0-9]+)(")',
        lambda m:m.group(1)+shift_col(m.group(2))+m.group(3)+m.group(4),xml)
+    if month_number==1:
+        print("BUILD_STAGE_SHIFTED_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     # Rebase cell and range attributes in their proper semantic contexts.
     for attr in ("ref","sqref","activeCell","topLeftCell"):
         xml=shift_xml_attr(xml,attr,True)
+    if month_number==1:
+        print("BUILD_STAGE_ATTR_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     # Shift column width definitions, create an editable time entry column E.
     def move_col(m):
         lo,hi=int(m.group(2)),int(m.group(4))
@@ -147,7 +153,11 @@ def patch_month(src, month_number):
         for offset in range(7):
             row=offset+9
             if offset==0: label="분기급량상한";formula="MAX(0,VALUE(설정!$B$9))"
-            elif offset in (1,2,3): label=mo[offset-1];formula=f"'{label}'!$H$33"
+            elif offset in (1,2,3):
+                label=mo[offset-1]
+                numbered_month=int(label[:-1])
+                calendar_days=29 if numbered_month==2 else (30 if numbered_month in (4,6,9,11) else 31)
+                formula=f"'{label}'!$H${calendar_days+2}"
             elif offset==4: label="분기급량합계";formula="SUM(M10:M12)"
             elif offset==5: label="분기급량미달";formula="MAX(0,M9-M13)"
             else: label="분기급량초과";formula="MAX(0,M13-M9)"
