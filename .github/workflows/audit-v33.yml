@@ -1,0 +1,17 @@
+name: Audit v3.3 native macro workbook
+on:
+  push:
+    branches: [feature/overtime-v3.3-exclusion-meal-quarter]
+    paths: ['tools/audit_v33.py', '.github/workflows/audit-v33.yml', '2026초과v3.3.xlsm']
+  pull_request:
+    paths: ['tools/audit_v33.py', '.github/workflows/audit-v33.yml', '2026초과v3.3.xlsm']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read-only v3.3 end-to-end OOXML and reference audit
+        run: python tools/audit_v33.py
