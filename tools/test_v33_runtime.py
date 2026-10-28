@@ -139,7 +139,13 @@ def verify(folder: Path):
                 if mode=="예":
                     if val not in ("",None):raise AssertionError(f"Active quarterly hours in field mode {m} M{row}: {val!r}")
                 elif row<=4:
-                    near(val, (177,100,60,current_hours)[row-1]/24,f"{mode}-{m}quarter-hours-{row}")
+                    expected=177 if row==1 else (100,60,current_hours)[row-2]/24
+                    near(val,expected,f"{mode}-{m}quarter-hours-{row}")
+            if mode=="아니오":
+                total=160+current_hours
+                near(get_cell(file,sheet,"M5"),total/24,f"{mode}-{m}quarter-hours-total")
+                near(get_cell(file,sheet,"M6"),max(0,177-total)/24,f"{mode}-{m}quarter-hours-under")
+                near(get_cell(file,sheet,"M7"),max(0,total-177)/24,f"{mode}-{m}quarter-hours-over")
             print("SCENARIO_PASS",mode,m,"quarter-hour-activation")
         # A regular month retains independent 67h monthly cap in both modes.
         near(get_cell(file,3,"F34"),0,f"{mode}-january-monthly-under")
