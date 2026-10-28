@@ -52,6 +52,13 @@ def main():
                 need("IF($A" in a and "평일" in a and "TIME(1,0,0)" in a and "$B" in a, f"{m}-{row}-editable-default")
                 need(f"$E{row}" in b and "TIME(9,0,0)" in b and "TIME(10,0,0)" not in b and "설정!$B$2" in b,f"{m}-{row}-deduct-and-cap")
                 year_total+=1
+            if m==1:
+                with zipfile.ZipFile("2026초과v3.2.xlsm") as older:
+                    oldc=cells(ET.fromstring(older.read("xl/worksheets/sheet3.xml")))
+                    print("OLD_SUMMARY",[(key,formula(oldc.get(key))) for key in ["E33","F33","G33","E34","F34"]])
+                for rr in doc.findall(".//x:sheetData/x:row",NS):
+                    if rr.attrib.get("r")=="33":
+                        print("NEW_RAW_ROW33",ET.tostring(rr,encoding="unicode")[:6000])
             print("AUDIT_ROW_SNAPSHOT",m,summary,[(k,formula(v),content(v,shared)) for k,v in d.items() if k in [f"{c}{summary}" for c in "DEFGHIJK"] or k in [f"{c}{summary-1}" for c in "DEFGHIJK"]])
             need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total actual={formula(d.get(f'F{summary}'))!r}")
             need("설정!$B$7" in formula(d.get(f"H{summary}")),f"{m}-monthly-meal-cap-linked")
