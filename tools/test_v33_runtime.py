@@ -15,8 +15,13 @@ MAIN_NS={"m":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 MONTH_DAY={m:(29 if m==2 else 30 if m in (4,6,9,11) else 31) for m in range(1,13)}
 
 def rewrite_cell(xml: str, ref: str, inside: str) -> str:
-    p=rf'(<c\b(?=[^>]*\br="{re.escape(ref)}")[^>]*>)(.*?)(</c>)'
-    xml,count=re.subn(p,lambda m:m.group(1)+inside+m.group(3),xml,count=1,flags=re.S)
+    p=rf'<c\b(?=[^>]*\br="{re.escape(ref)}")[^>]*(?:/>|>.*?</c>)'
+    def sub(m):
+        opening=m.group(0).split(">",1)[0].rstrip("/")
+        opening=re.sub(r'\s+t="[^"]+"','',opening)
+        if inside.startswith("<is>"):opening+=' t="inlineStr"'
+        return opening+">"+inside+"</c>"
+    xml,count=re.subn(p,sub,xml,count=1,flags=re.S)
     if count!=1: raise AssertionError("Missing cell "+ref)
     return xml
 
