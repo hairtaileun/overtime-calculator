@@ -154,10 +154,17 @@ def patch_month(src, month_number):
             b=f'<c r="M{row}"{stylize(sty_value)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
             pat=rf'(<row\b(?=[^>]*\br="{row}")[^>]*>)(.*?)(</row>)'
             def add(m):
-                if re.search(r'<c\b[^>]*\br="[LM]'+str(row)+r'"',m.group(2)):
-                    print("CONFLICT",month_number,row,re.findall(r'<c\b(?=[^>]*\br="[LM]'+str(row)+r'")[^>]*(?:/>|>.*?</c>)',m.group(2),flags=re.S)[:3])
-                check(not re.search(r'<c\b[^>]*\br="[LM]'+str(row)+r'"',m.group(2)),"quarter-space")
-                return m.group(1)+m.group(2)+a+b+m.group(3)
+                content=m.group(2)
+                for col,replacement in (("L",a),("M",b)):
+                    ref=f"{col}{row}"
+                    # Quarterly section has blank, style-only cells in these slots.
+                    # Replace placeholders while refusing to overwrite any actual data.
+                    pattern=rf'<c\b(?=[^>]*\br="{ref}")[^>]*/>'
+                    content,n=re.subn(pattern,lambda _:replacement,content,count=1)
+                    if not n:
+                        check(not re.search(rf'<c\b(?=[^>]*\br="{ref}")[^>]*>',content),"quarter-no-overwrite")
+                        content+=replacement
+                return m.group(1)+content+m.group(3)
             xml,nrepl=re.subn(pat,add,xml,count=1,flags=re.S)
             check(nrepl==1,f"quarter-row-{month_number}-{row}")
     # dimension extends for the inserted column and new quarterly meal panel.
