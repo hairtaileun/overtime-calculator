@@ -37,6 +37,7 @@ def populate(doc,mode):
         summary=days+2
         pos=(month-1)%3
         hours=(100,60,15 if ((month-1)//3)%2==0 else 30)[pos]
+        if month==7:hours=200  # Q3 starts above 177h before September.
         # Set daily recognized hours, not just monthly display totals.
         # This keeps independent SUM and monthly-cap formulas consistent.
         for row in range(2,summary):
@@ -62,7 +63,14 @@ def populate(doc,mode):
                 set_value(sh,f"F{row}",chunk/24)
                 row+=1
                 remaining-=chunk
-        set_value(sh,f"H{summary}",25)
+        if month==3:
+            # Test the actual monthly meal-cap formula: 27 daily eligible
+            # meals must produce 25 recognized and 2 above the monthly cap.
+            for row in range(2,summary):
+                set_value(sh,f"G{row}",1 if row<=28 else 0)
+                set_value(sh,f"H{row}",0)
+        else:
+            set_value(sh,f"H{summary}",25)
 
 def main():
     source=Path(sys.argv[1]).resolve()
