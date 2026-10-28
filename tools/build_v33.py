@@ -103,6 +103,8 @@ def patch_month(src, month_number):
     if month_number==1:
         print("BUILD_STAGE_INITIAL_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     xml=replace_formula_xml(xml,True)
+    if month_number==1:
+        print("BUILD_STAGE_FORMULA_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     # Move all pre-existing E.. cells right, preserving each cell's children and style.
     xml=re.sub(r'(<c\b[^>]*?\br=")([A-Z]{1,3})([0-9]+)(")',
        lambda m:m.group(1)+shift_col(m.group(2))+m.group(3)+m.group(4),xml)
