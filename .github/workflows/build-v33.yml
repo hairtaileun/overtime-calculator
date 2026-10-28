@@ -1,7 +1,7 @@
 name: Build v3.3 preserved-macro XLSM
 on:
   push:
-    branches: [feature/overtime-v3.3-exclusion-meal-quarter]
+    branches: [fix/v33-dual-month-quarter-caps]
     paths: ['tools/build_v33.py', '.github/workflows/build-v33.yml']
 permissions:
   contents: write
@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: feature/overtime-v3.3-exclusion-meal-quarter
+          ref: fix/v33-dual-month-quarter-caps
           fetch-depth: 0
       - name: Build v3.3 and verify strict OOXML invariants
         run: python tools/build_v33.py
@@ -30,8 +30,8 @@ jobs:
           git add -- '2026초과v3.3.xlsm'
           git -c core.quotepath=false diff --cached --name-only | grep -Fx '2026초과v3.3.xlsm'
           test "$(git diff --cached --name-only | wc -l)" -eq 1
-          git commit -m "release: add v3.3 workbook while preserving v3.1 and v3.2"
-          git push origin HEAD:feature/overtime-v3.3-exclusion-meal-quarter
+          git commit -m "fix: correct v3.3 dual monthly and quarterly caps; preserve v3.1 and v3.2"
+          git push origin HEAD:fix/v33-dual-month-quarter-caps
       - uses: actions/upload-artifact@v4
         if: always()
         with:
