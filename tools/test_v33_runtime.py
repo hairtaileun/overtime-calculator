@@ -109,8 +109,10 @@ def verify(folder: Path):
         stem="nonfield" if mode=="아니오" else "field"
         file=folder/f"{stem}.xlsx"
         assert file.is_file(),file
+        print("DIAGNOSTIC",mode, "jan_total_F33",get_cell(file,3,"F33"),"feb_total_F31",get_cell(file,4,"F31"))
         for m in (3,6,9,12):
             sheet=m+2
+            print("DIAGNOSTIC_QUARTER",mode,m,[(f"M{k}",get_cell(file,sheet,f"M{k}")) for k in (1,2,3,4,5,6,7,17)])
             current_hours=15 if m in (3,9) else 30
             cap=(17 if mode=="아니오" else 67)
             summary=MONTH_DAY[m]+2
