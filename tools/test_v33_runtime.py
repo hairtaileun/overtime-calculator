@@ -85,6 +85,14 @@ def prepare(target: Path,mode: str) -> None:
             z.writestr(info,parts[info.filename])
     print("SCENARIO_PREPARED",target,mode)
 
+def get_formula(path: Path,sheet_number: int,ref: str):
+    with zipfile.ZipFile(path) as z:
+        root=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
+        c=root.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',MAIN_NS)
+        if c is None:return None
+        f=c.find("m:f",MAIN_NS)
+        return f.text if f is not None else None
+
 def get_cell(path: Path,sheet_number: int,ref: str):
     with zipfile.ZipFile(path) as z:
         root=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
@@ -110,6 +118,8 @@ def verify(folder: Path):
         file=folder/f"{stem}.xlsx"
         assert file.is_file(),file
         print("DIAGNOSTIC",mode, "jan_total_F33",get_cell(file,3,"F33"),"feb_total_F31",get_cell(file,4,"F31"))
+        print("SOURCE_FORMULAS",mode,[(ref,get_formula(BASE,5,ref)) for ref in ("M1","M2","M3","M4","M5","M6","M7","M17")])
+        print("RECALC_FORMULAS",mode,[(ref,get_formula(file,5,ref)) for ref in ("M1","M2","M3","M4","M5","M6","M7","M17")])
         for m in (3,6,9,12):
             sheet=m+2
             print("DIAGNOSTIC_QUARTER",mode,m,[(f"M{k}",get_cell(file,sheet,f"M{k}")) for k in (1,2,3,4,5,6,7,17)])
