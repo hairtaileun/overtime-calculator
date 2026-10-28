@@ -1,0 +1,41 @@
+name: Build v3.3 preserved-macro XLSM
+on:
+  push:
+    branches: [feature/overtime-v3.3-exclusion-meal-quarter]
+    paths: ['tools/build_v33.py', '.github/workflows/build-v33.yml']
+permissions:
+  contents: write
+concurrency:
+  group: overtime-v33-build
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/overtime-v3.3-exclusion-meal-quarter
+          fetch-depth: 0
+      - name: Build v3.3 and verify strict OOXML invariants
+        run: python tools/build_v33.py
+      - name: Check output digest
+        run: sha256sum '2026초과v3.2.xlsm' '2026초과v3.3.xlsm'
+      - name: Commit only new workbook
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- '2026초과v3.3.xlsm'
+          git diff --cached --name-only | grep -Fx '2026초과v3.3.xlsm'
+          test "$(git diff --cached --name-only | wc -l)" -eq 1
+          git commit -m "release: add v3.3 workbook while preserving v3.1 and v3.2"
+          git push origin HEAD:feature/overtime-v3.3-exclusion-meal-quarter
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: overtime-v3.3-built
+          path: '2026초과v3.3.xlsm'
+          if-no-files-found: warn
+          retention-days: 30
