@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Read-only, fail-closed regression audit for the official v3.3 binary."""
-import hashlib, re, zipfile, sys
+import hashlib, zipfile
 from xml.etree import ElementTree as ET
 from pathlib import Path
 
@@ -45,6 +45,8 @@ def main():
             summary=daycount+2
             doc=ET.fromstring(z.read(f"xl/worksheets/sheet{m+2}.xml"))
             d=cells(doc)
+            allrefs=[c.attrib["r"] for c in doc.findall(".//x:sheetData/x:row/x:c",NS)]
+            need(len(allrefs)==len(set(allrefs)),f"{m}-no-duplicate-cell-addresses")
             need(content(d["E1"],shared)=="제외시간",f"{m}-exclusion-header")
             need(content(d["F1"],shared)=="일일초과",f"{m}-daily-header")
             for row in range(2,daycount+2):
@@ -52,14 +54,6 @@ def main():
                 need("IF($A" in a and "평일" in a and "TIME(1,0,0)" in a and "$B" in a, f"{m}-{row}-editable-default")
                 need(f"$E{row}" in b and "TIME(9,0,0)" in b and "TIME(10,0,0)" not in b and "설정!$B$2" in b,f"{m}-{row}-deduct-and-cap")
                 year_total+=1
-            if m==1:
-                with zipfile.ZipFile("2026초과v3.2.xlsm") as older:
-                    oldc=cells(ET.fromstring(older.read("xl/worksheets/sheet3.xml")))
-                    print("OLD_SUMMARY",[(key,formula(oldc.get(key))) for key in ["E33","F33","G33","E34","F34"]])
-                for rr in doc.findall(".//x:sheetData/x:row",NS):
-                    if rr.attrib.get("r")=="33":
-                        print("NEW_RAW_ROW33",ET.tostring(rr,encoding="unicode")[:6000])
-            print("AUDIT_ROW_SNAPSHOT",m,summary,[(k,formula(v),content(v,shared)) for k,v in d.items() if k in [f"{c}{summary}" for c in "DEFGHIJK"] or k in [f"{c}{summary-1}" for c in "DEFGHIJK"]])
             need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total actual={formula(d.get(f'F{summary}'))!r}")
             need("설정!$B$7" in formula(d.get(f"H{summary}")),f"{m}-monthly-meal-cap-linked")
             need(f"$F2" in formula(d.get("G2")),f"{m}-holiday-meal-uses-recognized-hours")
@@ -71,7 +65,9 @@ def main():
                 need("설정!$B$8" in formula(d["M1"]),f"{m}-hours-quarter-cap-preserved")
                 need("설정!$B$9" in formula(d["M9"]),f"{m}-meal-quarter-cap")
                 for i,n in enumerate(previous,start=10):
-                    need(f"'{n}'!$H$" in formula(d[f"M{i}"]),f"{m}-quarter-month-{n}-recognized-meal")
+                    monthnum=int(n[:-1])
+                    ndays=29 if monthnum==2 else 30 if monthnum in (4,6,9,11) else 31
+                    need(formula(d[f"M{i}"])==f"'{n}'!$H${ndays+2}",f"{m}-quarter-month-{n}-recognized-meal-row-{ndays+2}")
                 need("SUM(M10:M12)" in formula(d["M13"]),f"{m}-quarter-meal-total")
                 need("M9-M13" in formula(d["M14"]),f"{m}-quarter-meal-under")
                 need("M13-M9" in formula(d["M15"]),f"{m}-quarter-meal-over")
