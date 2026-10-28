@@ -136,6 +136,7 @@ def verify(folder: Path):
         file=folder/f"{stem}.xlsx"
         assert file.is_file(),file
         print("DIAGNOSTIC",mode, "jan_total_F33",get_cell(file,3,"F33"),"feb_total_F31",get_cell(file,4,"F31"))
+        print("DIAGNOSTIC_MARCH",mode,[(r,get_cell(file,5,r)) for r in ("B2","C2","D2","E2","F2","B3","C3","D3","E3","F3","B4","C4","D4","E4","F4","F5","F33","F34","F35")])
         print("SOURCE_FORMULAS",mode,[(ref,get_formula(BASE,5,ref)) for ref in ("M1","M2","M3","M4","M5","M6","M7","M17")])
         print("RECALC_FORMULAS",mode,[(ref,get_formula(file,5,ref)) for ref in ("M1","M2","M3","M4","M5","M6","M7","M17")])
         for m in (3,6,9,12):
