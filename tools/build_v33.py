@@ -233,6 +233,17 @@ def patch_settings(data):
     p=r'(<row\b(?=[^>]*\br="9")[^>]*>)'
     xml,n=re.subn(p,lambda m:m.group(1)+added,xml,count=1)
     check(n==1,"quarterly-meal-cap-setting-B9")
+    # Explicit employment mode. Default is non-field to retain prior quarter behavior.
+    label_style=cell_style(xml,"A6"); input_style=cell_style(xml,"B6")
+    field=f'<c r="A10"{stylize(label_style)} t="inlineStr"><is><t>현업여부</t></is></c><c r="B10"{stylize(input_style)} t="inlineStr"><is><t>아니오</t></is></c>'
+    p=r'(<row\b(?=[^>]*\br="10")[^>]*>)'
+    xml,n=re.subn(p,lambda m:m.group(1)+field,xml,count=1)
+    check(n==1,"field-duty-setting-B10-default-no")
+    dv='<dataValidation type="list" allowBlank="0" showErrorMessage="1" errorTitle="선택 오류" error="예 또는 아니오를 선택하세요." sqref="B10"><formula1>"예,아니오"</formula1></dataValidation>'
+    xml,n=re.subn(r'(<dataValidations\b[^>]*\bcount=")(\d+)(")',lambda m:m.group(1)+str(int(m.group(2))+1)+m.group(3),xml,count=1)
+    check(n==1,"settings-validation-count")
+    check("</dataValidations>" in xml,"settings-validation-close")
+    xml=xml.replace("</dataValidations>",dv+"</dataValidations>",1)
     return xml.encode("utf-8")
 
 def patch_meals(data):
