@@ -100,21 +100,17 @@ def patch_month(src, month_number):
             cells[n]=cell_style(xml,f"E{n}")
     check(len(cells)>=28,f"month{month_number}-daily-cells-{len(cells)}")
     header_style=cell_style(xml,"E1")
-    if month_number==1:
-        print("BUILD_STAGE_INITIAL_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     xml=replace_formula_xml(xml,True)
-    if month_number==1:
-        print("BUILD_STAGE_FORMULA_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     # Move all pre-existing E.. cells right, preserving each cell's children and style.
     xml=re.sub(r'(<c\b[^>]*?\br=")([A-Z]{1,3})([0-9]+)(")',
        lambda m:m.group(1)+shift_col(m.group(2))+m.group(3)+m.group(4),xml)
-    if month_number==1:
-        print("BUILD_STAGE_SHIFTED_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
     # Rebase cell and range attributes in their proper semantic contexts.
     for attr in ("ref","sqref","activeCell","topLeftCell"):
         xml=shift_xml_attr(xml,attr,True)
-    if month_number==1:
-        print("BUILD_STAGE_ATTR_ROW33",re.findall(r'<c\b[^>]*\br="[A-Z]{1,3}33"[^>]*>',xml))
+    # Extended x14 data validations store targets as <xm:sqref>TEXT</xm:sqref>,
+    # not as ordinary sqref attributes. Rebase those too (notably meal-shop dropdown).
+    xml=re.sub(r"(<(?:[A-Za-z0-9_]+:)?sqref\b[^>]*>)([^<]+)(</(?:[A-Za-z0-9_]+:)?sqref>)",
+        lambda m:m.group(1)+shift_ref_text(m.group(2),True)+m.group(3),xml)
     # Shift column width definitions, create an editable time entry column E.
     def move_col(m):
         lo,hi=int(m.group(2)),int(m.group(4))
