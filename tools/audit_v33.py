@@ -68,18 +68,32 @@ def main():
             need(f"$F2" in formula(d.get("G2")),f"{m}-holiday-meal-uses-recognized-hours")
             sqrefs=" ".join(x.attrib.get("sqref","") or (x.text or "") for x in doc.iter() if x.tag.rsplit("}",1)[-1] in ("dataValidation","sqref"))
             need("J1:J1048576" in sqrefs,f"{m}-meal-shop-dropdown-shifted")
-            if m not in (3,6,9,12):
-                need("설정!$B$3" in formula(d.get(f"F{summary+1}")),f"{m}-non-quarter-month-cap-remains-configured")
+            # Every calendar month must apply *both* ceilings for non-field
+            # staff and the ordinary monthly ceiling for field staff.
+            cap=formula(d.get("M17"))
+            consumed=formula(d.get("M18"))
+            need('IF(설정!$B$10="예"' in cap,f"{m}-field-duty-mode-switch")
+            need("설정!$B$3" in cap and "설정!$B$8" in cap and "MIN(" in cap,f"{m}-monthly-and-quarterly-both-limits")
+            need(consumed==f"MIN(MAX(0,F{summary}),M17)",f"{m}-recognized-min-of-month-total-and-applied-cap")
+            need(formula(d.get(f"F{summary+1}"))==f"MAX(0,$M$17-F{summary})",f"{m}-monthly-under-combined-cap")
+            need(formula(d.get(f"F{summary+2}"))==f"MAX(0,F{summary}-$M$17)",f"{m}-monthly-over-combined-cap")
+            need(content(d["L17"],shared)=="월상한시간",f"{m}-applied-cap-caption")
+            need(content(d["L18"],shared)=="월인정시간",f"{m}-monthly-recognized-caption")
+            start=((m-1)//3)*3+1
+            for previous in range(start,m):
+                need(f"'{previous}월'!$M$18" in cap,f"{m}-quarter-balance-uses-recognized-month-{previous}")
+            # Never subtract the current month or a future month's recognition.
+            for nextmonth in range(m,min(start+3,13)):
+                need(f"'{nextmonth}월'!$M$18" not in cap,f"{m}-no-current-or-future-quarter-dependency-{nextmonth}")
             if m in (3,6,9,12):
                 previous=[f"{n}월" for n in range(m-2,m+1)]
                 need("설정!$B$8" in formula(d["M1"]),f"{m}-hours-quarter-cap-preserved")
                 for row in range(1,8):
                     need(formula(d[f"M{row}"]).startswith('IF(설정!$B$10="예","",'),f"{m}-quarter-hours-unused-if-field-{row}")
-                need(content(d["L17"],shared)=="월상한시간",f"{m}-quarter-month-cap-visible-label")
-                cap=formula(d["M17"])
-                need('IF(설정!$B$10="예"' in cap and "설정!$B$3" in cap and "설정!$B$8" in cap and "SUM(M2:M3)" in cap,f"{m}-quarter-month-cap-field-or-remaining")
-                need(formula(d[f"F{summary+1}"])==f"MAX(0,$M$17-F{summary})",f"{m}-monthly-cap-remaining")
-                need(formula(d[f"F{summary+2}"])==f"MAX(0,F{summary}-$M$17)",f"{m}-monthly-cap-excess")
+                # Quarter panel must use each month's capped recognition
+                # rather than raw daily input totals, including first and second month.
+                for pidx,ref_month in enumerate(range(m-2,m+1),start=2):
+                    need(formula(d[f"M{pidx}"])==f'IF(설정!$B$10="예","","\'{ref_month}월\'!$M$18")',f"{m}-quarter-counts-recognized-month-{ref_month}")
                 need("설정!$B$10" in formula(d["M16"]) and content(d["L16"],shared)=="분기초근 적용",f"{m}-inactive-indicator")
                 cfs=[c for c in doc.iter() if c.tag.rsplit("}",1)[-1]=="conditionalFormatting" and c.attrib.get("sqref")=="L1:M8"]
                 need(len(cfs)==1,f"{m}-quarter-conditional-grayscale-panel")
