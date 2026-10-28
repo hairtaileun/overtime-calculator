@@ -54,11 +54,10 @@ def main():
                 need("IF($A" in a and "평일" in a and "TIME(1,0,0)" in a and "$B" in a, f"{m}-{row}-editable-default")
                 need(f"$E{row}" in b and "TIME(9,0,0)" in b and "TIME(10,0,0)" not in b and "설정!$B$2" in b,f"{m}-{row}-deduct-and-cap")
                 year_total+=1
-            need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total actual={formula(d.get(f'F{summary}'))!r}")
+            need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total")
             need("설정!$B$7" in formula(d.get(f"H{summary}")),f"{m}-monthly-meal-cap-linked")
             need(f"$F2" in formula(d.get("G2")),f"{m}-holiday-meal-uses-recognized-hours")
-            validations=doc.findall(".//x:dataValidation",NS)
-            sqrefs=" ".join(x.attrib.get("sqref","") for x in validations)
+            sqrefs=" ".join(x.attrib.get("sqref","") or (x.text or "") for x in doc.iter() if x.tag.rsplit("}",1)[-1] in ("dataValidation","sqref"))
             need("J1:J1048576" in sqrefs,f"{m}-meal-shop-dropdown-shifted")
             if m in (3,6,9,12):
                 previous=[f"{n}월" for n in range(m-2,m+1)]
