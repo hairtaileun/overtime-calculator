@@ -159,13 +159,13 @@ def patch_month(src, month_number):
         # March/June/September/December use remaining quarter hours in non-field mode.
         cap_formula='IF(설정!$B$10="예",MAX(0,VALUE(설정!$B$3))/24,MAX(0,VALUE(설정!$B$8)/24-SUM(M2:M3)))'
         summary=(29 if month_number==2 else (30 if month_number in (4,6,9,11) else 31))+2
-        for summary_row,expr in ((summary+1,f"MAX(0,$M$8-F{summary})"),
-                                  (summary+2,f"MAX(0,F{summary}-$M$8)")):
+        for summary_row,expr in ((summary+1,f"MAX(0,$M$17-F{summary})"),
+                                  (summary+2,f"MAX(0,F{summary}-$M$17)")):
             fp=rf'(<c\b(?=[^>]*\br="F{summary_row}")[^>]*>.*?<f\b[^>]*>)(.*?)(</f>)'
             xml,n=re.subn(fp,lambda m:m.group(1)+expr+m.group(3),xml,count=1,flags=re.S)
             check(n==1,f"quarter-{month_number}-monthly-cap-summary-F{summary_row}")
         special={
-            8:(("월상한시간",sty_label),(cap_formula,sty_time)),
+            17:(("월상한시간",sty_label),(cap_formula,sty_time)),
             16:(("분기초근 적용",sty_label),('IF(설정!$B$10="예","미사용(현업)","사용(비현업)")',sty_value)),
         }
         for row,((caption,caption_style),(formula,formula_style)) in special.items():
@@ -185,7 +185,7 @@ def patch_month(src, month_number):
             xml,n=re.subn(pat,add_status,xml,count=1,flags=re.S)
             check(n==1,f"quarter-{month_number}-status-row-{row}")
         rule_priority=max([int(p) for p in re.findall(r'<cfRule\b[^>]*\bpriority="(\d+)"',xml)] or [0])+1
-        cf=f'<conditionalFormatting sqref="L1:M7"><cfRule type="expression" dxfId="__GREY_DXF__" priority="{rule_priority}"><formula>$M$16="미사용(현업)"</formula></cfRule></conditionalFormatting>'
+        cf=f'<conditionalFormatting sqref="L1:M8"><cfRule type="expression" dxfId="__GREY_DXF__" priority="{rule_priority}"><formula>$M$16="미사용(현업)"</formula></cfRule></conditionalFormatting>'
         if '<dataValidations' in xml:
             xml=xml.replace('<dataValidations',cf+'<dataValidations',1)
         elif '<pageMargins' in xml:
@@ -334,7 +334,7 @@ def main():
                     check(ef is not None and ff is not None and "$E"+str(n) in ff.text,f"month-{month}-row-{n}-editable-exclusion")
                     check("TIME(10,0,0)" not in ff.text,"no-fixed-10h-deduction")
             if month in (3,6,9,12):
-                check("설정!$B$10" in cc["M8"].find("x:f",NS).text,f"quarter-{month}-cap-switch")
+                check("설정!$B$10" in cc["M17"].find("x:f",NS).text,f"quarter-{month}-cap-switch")
                 check("설정!$B$10" in cc["M16"].find("x:f",NS).text,f"quarter-{month}-grayscale-status")
                 for n in range(1,8):
                     check(cc[f"M{n}"].find("x:f",NS).text.startswith('IF(설정!$B$10="예","",'),f"quarter-{month}-disabled-hours-{n}")
