@@ -52,7 +52,7 @@ def main():
                 need("IF($A" in a and "평일" in a and "TIME(1,0,0)" in a and "$B" in a, f"{m}-{row}-editable-default")
                 need(f"$E{row}" in b and "TIME(9,0,0)" in b and "TIME(10,0,0)" not in b and "설정!$B$2" in b,f"{m}-{row}-deduct-and-cap")
                 year_total+=1
-            need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total")
+            need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total actual={formula(d.get(f'F{summary}'))!r}")
             need("설정!$B$7" in formula(d.get(f"H{summary}")),f"{m}-monthly-meal-cap-linked")
             need(f"$F2" in formula(d.get("G2")),f"{m}-holiday-meal-uses-recognized-hours")
             validations=doc.findall(".//x:dataValidation",NS)
