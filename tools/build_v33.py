@@ -52,7 +52,7 @@ def shift_ref_text(value, current_month=False):
 def replace_formula_xml(xml, month):
     def sub(m):
         return m.group(1)+shift_ref_text(m.group(2),month)+m.group(3)
-    return re.sub(r"(<f\b[^>]*>)(.*?)(</f>)",sub,xml,flags=re.S)
+    return re.sub(r"(<f\b[^>]*?(?<!/)>)((?:(?!<f\b).)*?)(</f>)",sub,xml,flags=re.S)
 
 def shift_xml_attr(xml, attr, month=True):
     pattern=rf'(\b{attr}=")([^"]+)(")'
