@@ -63,7 +63,25 @@ def prepare(target: Path,mode: str) -> None:
         # 100h then 60h, closing month alternating between 15h and 30h.
         quarter_position=(m-1)%3
         hours=(100,60,15 if ((m-1)//3)%2==0 else 30)[quarter_position]
-        xml=numeric(xml,f"F{summary}",hours/24)
+        # Populate actual daily rows so both monthly SUM and independent
+        # over-cap formulas see the same total. Overwriting only the monthly
+        # summary would violate the source's original SUM invariants.
+        for daily_row in range(2,summary):
+            if m==3 and daily_row in (2,3,4):
+                continue  # Retain these genuine daily formulas for exclusion tests.
+            xml=numeric(xml,f"F{daily_row}",0)
+        if m==3:
+            # Original daily formulas on rows 2/3/4 will total 11.5 hours.
+            assert hours==15
+            xml=numeric(xml,"F5",3.5/24)
+        else:
+            remaining=hours
+            daily_row=2
+            while remaining:
+                chunk=min(8,remaining)
+                xml=numeric(xml,f"F{daily_row}",chunk/24)
+                daily_row+=1
+                remaining-=chunk
         # Every month has 25 recognized meals (a quarter totals 75 > 60).
         xml=numeric(xml,f"H{summary}",25)
         if m==3:
