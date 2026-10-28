@@ -251,6 +251,30 @@ def patch_meals(data):
     xml=replace_formula_xml(xml,False)
     return xml.encode("utf-8")
 
+def patch_styles(data):
+    """Append grayscale conditional-formatting style while preserving all legacy styles."""
+    xml=data.decode("utf-8")
+    grey='<dxf><font><color rgb="FF6B7280"/></font><fill><patternFill patternType="solid"><fgColor rgb="FFE0E0E0"/><bgColor indexed="64"/></patternFill></fill></dxf>'
+    match=re.search(r'<dxfs\b[^>]*(?:/>|>.*?</dxfs>)',xml,flags=re.S)
+    if match:
+        old=match.group(0)
+        count=re.search(r'\bcount="(\d+)"',old)
+        check(count is not None,"differential-styles-have-count")
+        index=int(count.group(1))
+        updated=re.sub(r'\bcount="\d+"',f'count="{index+1}"',old,count=1)
+        if updated.endswith('/>'):
+            updated=updated[:-2]+'>'+grey+'</dxfs>'
+        else:
+            updated=updated.replace('</dxfs>',grey+'</dxfs>',1)
+        xml=xml[:match.start()]+updated+xml[match.end():]
+    else:
+        index=0
+        place=re.search(r'<tableStyles\b',xml)
+        check(place is not None,"styles-dxf-insertion-position")
+        xml=xml[:place.start()]+f'<dxfs count="1">{grey}</dxfs>'+xml[place.start():]
+    print("GREY_DXF_ID",index)
+    return xml.encode("utf-8"),index
+
 def patch_workbook(data):
     xml=data.decode("utf-8")
     def rep(m):
@@ -270,10 +294,12 @@ def main():
     changed["xl/worksheets/sheet1.xml"]=patch_settings(originals["xl/worksheets/sheet1.xml"])
     changed["xl/worksheets/sheet2.xml"]=patch_meals(originals["xl/worksheets/sheet2.xml"])
     changed["xl/workbook.xml"]=patch_workbook(originals["xl/workbook.xml"])
+    changed["xl/styles.xml"],grey_id=patch_styles(originals["xl/styles.xml"])
     nday=0
     for month in range(1,13):
         part=f"xl/worksheets/sheet{month+2}.xml"
-        new,n=patch_month(originals[part],month);changed[part]=new;nday+=n
+        new,n=patch_month(originals[part],month)
+        changed[part]=new.replace(b"__GREY_DXF__",str(grey_id).encode("ascii"));nday+=n
         print("MONTH_REWRITTEN_DAYS",month,n)
     print("TOTAL_REWRITTEN_DAYS",nday)
     check(nday==366,"all-366-calendar-daily-overtime-and-exclusion-formulas")
@@ -308,6 +334,10 @@ def main():
                     check(ef is not None and ff is not None and "$E"+str(n) in ff.text,f"month-{month}-row-{n}-editable-exclusion")
                     check("TIME(10,0,0)" not in ff.text,"no-fixed-10h-deduction")
             if month in (3,6,9,12):
+                check("설정!$B$10" in cc["M8"].find("x:f",NS).text,f"quarter-{month}-cap-switch")
+                check("설정!$B$10" in cc["M16"].find("x:f",NS).text,f"quarter-{month}-grayscale-status")
+                for n in range(1,8):
+                    check(cc[f"M{n}"].find("x:f",NS).text.startswith('IF(설정!$B$10="예","",'),f"quarter-{month}-disabled-hours-{n}")
                 for n in range(9,16):
                     check(f"L{n}" in cc and f"M{n}" in cc,f"quarter-{month}-meal-row-{n}")
             for f in root.findall(".//x:f",NS):
@@ -316,6 +346,8 @@ def main():
         settings=ET.fromstring(final.read("xl/worksheets/sheet1.xml"))
         values={c.attrib["r"]:c.find("x:v",NS).text for c in settings.findall(".//x:sheetData/x:row/x:c",NS) if c.find("x:v",NS) is not None}
         check(values["B7"]=="25" and values["B9"]=="60","configurable-25-and-60-caps")
+        settings_cells={c.attrib["r"]:c for c in settings.findall(".//x:sheetData/x:row/x:c",NS)}
+        check(settings_cells["B10"].find(".//x:t",NS).text=="아니오","field-duty-default-no")
         check(not any("#REF!" in f for f in all_formula),"no-broken-formula-literals")
         wb=final.read("xl/workbook.xml").decode("utf-8")
         check("fullCalcOnLoad=\"1\"" in wb and "forceFullCalc=\"1\"" in wb,"excel-full-recalc")
