@@ -22,7 +22,26 @@ def rewrite_cell(xml: str, ref: str, inside: str) -> str:
         if inside.startswith("<is>"):opening+=' t="inlineStr"'
         return opening+">"+inside+"</c>"
     xml,count=re.subn(p,sub,xml,count=1,flags=re.S)
-    if count!=1: raise AssertionError("Missing cell "+ref)
+    if count==0:
+        # The template intentionally omits many empty C/D input cells.
+        column,rownum=re.fullmatch(r'([A-Z]+)([0-9]+)',ref).groups()
+        new=f'<c r="{ref}"'+(' t="inlineStr"' if inside.startswith("<is>") else '')+'>'+inside+'</c>'
+        rp=rf'(<row\b(?=[^>]*\br="{rownum}")[^>]*>)(.*?)(</row>)'
+        def insert(m):
+            body=m.group(2)
+            def index(col):
+                out=0
+                for char in col:out=out*26+ord(char)-64
+                return out
+            for c in re.finditer(rf'<c\b[^>]*\br="([A-Z]+){rownum}"',body):
+                if index(c.group(1))>index(column):
+                    body=body[:c.start()]+new+body[c.start():]
+                    break
+            else:body+=new
+            return m.group(1)+body+m.group(3)
+        xml,n=re.subn(rp,insert,xml,count=1,flags=re.S)
+        if n!=1:raise AssertionError("Missing row for "+ref)
+    elif count!=1:raise AssertionError("Duplicated cell "+ref)
     return xml
 
 def numeric(xml,ref,value):
