@@ -64,8 +64,8 @@ def main():
        ("holiday-manual-90min","아니오",True,10*3600,15*3600,12600,1,0,5400,8,"예"),
        ("weekday-manual-90min","아니오",False,6*3600,19*3600,9000,1,0,5400,8,"예"),
        ("holiday-b6-no","아니오",True,10*3600,15*3600,0,0,0,None,8,"아니오"),
-       ("holiday-daily-cap-4","아니오",True,6*3600,23*3600,14400,1,1,None,4,"예"),
-       ("holiday-daily-cap-8","예",True,6*3600,23*3600,28800,1,1,None,8,"예"),
+       ("holiday-daily-cap-4","아니오",True,6*3600,23*3600,14400,1,0,None,4,"예"),
+       ("holiday-daily-cap-8","예",True,6*3600,23*3600,28800,1,0,None,8,"예"),
        ("weekday-field-exclusion","예",False,6*3600,19*3600,10800,1,0,None,8,"예"),
     ]
     for case in scenarios:scenario(*case)
