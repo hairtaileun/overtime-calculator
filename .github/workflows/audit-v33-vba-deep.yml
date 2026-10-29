@@ -55,6 +55,21 @@ jobs:
               assert val is None or not val.text, "2026 February 29 should be blank"
               assert "IF($A30" in cells["E30"].find("x:f",ns).text
               print("NON_LEAP_YEAR_PASS February 29 not active in 2026; leap-year formula preserved")
+          with ZipFile(p) as z:
+              sh=ET.fromstring(z.read("xl/worksheets/sheet2.xml"))
+              cc={c.attrib["r"]:c for c in sh.findall(".//x:sheetData/x:row/x:c",ns)}
+              ss=ET.fromstring(z.read("xl/sharedStrings.xml"))
+              strings=["".join(entry.itertext()) for entry in ss]
+              for row in range(1,6):
+                  for col in "ABCDEFGHIJKLMNOP":
+                      ref=col+str(row)
+                      c=cc.get(ref)
+                      if c is None:continue
+                      f=c.find("x:f",ns);v=c.find("x:v",ns)
+                      value=(v.text if v is not None else "")
+                      if c.get("t")=="s" and value: value=strings[int(value)]
+                      if f is not None or value:
+                          print("MEAL_LEDGER",ref,"formula",f.text if f is not None else "","value",value)
           PY
   numeric-attendance:
     runs-on: ubuntu-latest
