@@ -1,7 +1,7 @@
 name: Build v3.3 preserved-macro XLSM
 on:
   push:
-    branches: [fix/v33-dual-month-quarter-caps]
+    branches: [main, fix/v33-dual-month-quarter-caps]
     paths: ['tools/build_v33.py', '.github/workflows/build-v33.yml']
 permissions:
   contents: write
@@ -15,23 +15,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: fix/v33-dual-month-quarter-caps
           fetch-depth: 0
       - name: Build v3.3 and verify strict OOXML invariants
         run: python tools/build_v33.py
       - name: Check output digest
         run: sha256sum '2026초과v3.2.xlsm' '2026초과v3.3.xlsm'
-      - name: Commit only new workbook
+      - name: Commit regenerated v3.3 only when content changes
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -- '2026초과v3.3.xlsm'
-          git -c core.quotepath=false diff --cached --name-only | grep -Fx '2026초과v3.3.xlsm'
-          test "$(git diff --cached --name-only | wc -l)" -eq 1
-          git commit -m "fix: correct v3.3 dual monthly and quarterly caps; preserve v3.1 and v3.2"
-          git push origin HEAD:fix/v33-dual-month-quarter-caps
+          if git diff --cached --quiet; then
+            echo "PASS: regenerated workbook matches checked-in release exactly"
+          else
+            git -c core.quotepath=false diff --cached --name-only | grep -Fx '2026초과v3.3.xlsm'
+            test "$(git diff --cached --name-only | wc -l)" -eq 1
+            git commit -m "release: rebuild v3.3 from pinned v3.2 source"
+            git push origin "HEAD:$GITHUB_REF_NAME"
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:
