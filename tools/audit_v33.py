@@ -63,10 +63,28 @@ def main():
                 need("IF($A" in a and "평일" in a and "TIME(1,0,0)" in a and "$B" in a, f"{m}-{row}-editable-default")
                 need(f"$E{row}" in b and "TIME(9,0,0)" in b and "TIME(10,0,0)" not in b and "설정!$B$2" in b,f"{m}-{row}-deduct-and-cap")
                 year_total+=1
-            if m in (1,2,3,6):
-                print("MEAL_SOURCE",m,"summary",summary,[(f"{col}{r}",formula(d.get(f"{col}{r}")),content(d.get(f"{col}{r}"),shared)) for col in "GHI" for r in (2,summary,summary+1,summary+2)])
             need(f"SUM(F2:F{summary-1})" in formula(d.get(f"F{summary}")),f"{m}-monthly-hours-total")
-            need("설정!$B$7" in formula(d.get(f"H{summary}")),f"{m}-monthly-meal-cap-linked")
+            # Meal counts are capped identically for field and nonfield staff.
+            # Each H-summary references monthly B7, quarterly B9 and only
+            # the previous recognized H-summary cells in its own quarter.
+            meal_accepted=formula(d.get(f"H{summary}"))
+            meal_under=formula(d.get(f"H{summary+1}"))
+            meal_excess=formula(d.get(f"H{summary+2}"))
+            need("설정!$B$7" in meal_accepted and "설정!$B$9" in meal_accepted,
+                 f"{m}-monthly-and-quarterly-meal-ceilings-linked")
+            need("설정!$B$10" not in meal_accepted,f"{m}-meal-caps-identical-field-and-nonfield")
+            need(f"SUM(G2:H{summary-1})" in meal_accepted,f"{m}-meal-raw-daily-sum")
+            need(f"H{summary}" in meal_under,f"{m}-meal-under-recognized")
+            need(f"SUM(G2:H{summary-1})" in meal_excess,f"{m}-meal-excess-raw")
+            mfirst=((m-1)//3)*3+1
+            for pm in range(mfirst,m):
+                pday=29 if pm==2 else 30 if pm in (4,6,9,11) else 31
+                expected_ref=f"'{pm}월'!$H$"+str(pday+2)
+                need(expected_ref in meal_accepted,f"{m}-remaining-quarter-meals-reference-{pm}")
+            for n in range(m,min(mfirst+3,13)):
+                nday=29 if n==2 else 30 if n in (4,6,9,11) else 31
+                check_ref=f"'{n}월'!$H$"+str(nday+2)
+                need(check_ref not in meal_accepted,f"{m}-no-current-or-future-meal-ref-{n}")
             need(f"$F2" in formula(d.get("G2")),f"{m}-holiday-meal-uses-recognized-hours")
             sqrefs=" ".join(x.attrib.get("sqref","") or (x.text or "") for x in doc.iter() if x.tag.rsplit("}",1)[-1] in ("dataValidation","sqref"))
             need("J1:J1048576" in sqrefs,f"{m}-meal-shop-dropdown-shifted")
@@ -110,7 +128,10 @@ def main():
                     need(formula(d[f"M{i}"])==f"'{n}'!$H${ndays+2}",f"{m}-quarter-month-{n}-recognized-meal-row-{ndays+2}")
                 need("SUM(M10:M12)" in formula(d["M13"]),f"{m}-quarter-meal-total")
                 need("M9-M13" in formula(d["M14"]),f"{m}-quarter-meal-under")
-                need("M13-M9" in formula(d["M15"]),f"{m}-quarter-meal-over")
+                over=formula(d["M15"])
+                need("MAX(0,SUM(" in over and "-M9" in over,f"{m}-quarter-meal-over-reports-quarter-only-excess")
+                for pm in range(m-2,m+1):
+                    need(f"'{pm}월'!$G$2:" in over,f"{m}-quarter-excess-raw-month-{pm}")
         need(year_total==366,"calendar-366-formulas")
         meal=cells(ET.fromstring(z.read("xl/worksheets/sheet2.xml")))
         u=formula(meal.get("O2"))
