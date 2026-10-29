@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent read-only numerical verification of official macro-enabled v3.3.
 
-Five scenarios exercise the SAME release binary with values edited through UNO.
+Eight scenarios exercise the SAME release binary with values edited through UNO.
 The XLSM is never saved and the verifier examines only temporary XLSX copies.
 """
 from __future__ import annotations
@@ -10,14 +10,17 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 BASE=Path("2026초과v3.3.xlsm")
-EXPECTED_SHA="e4a1e6ddca6cccaf56dca0bc7058b0058b5bbeb6a63d181abc576926723fe800"
+EXPECTED_SHA="1a5f1cc9cd28d68c3e8151c838b97a62bd37396ad77c2066f730cdc7b6d8d716"
 NS={"m":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 DAYS={m:29 if m==2 else 30 if m in (4,6,9,11) else 31 for m in range(1,13)}
-SCENARIOS=(("nonfield","아니오",177),
-           ("field","예",177),
-           ("nonfield_quarter100","아니오",100),
-           ("nonfield_low_prior","아니오",177),
-           ("nonfield_fullquarter","아니오",177))
+SCENARIOS=(("nonfield","아니오",177,25,60),
+           ("field","예",177,25,60),
+           ("nonfield_quarter100","아니오",100,25,60),
+           ("nonfield_low_prior","아니오",177,25,60),
+           ("nonfield_fullquarter","아니오",177,25,60),
+           ("nonfield_meal40","아니오",177,25,40),
+           ("field_meal40","예",177,25,40),
+           ("nonfield_meal20","아니오",177,20,60))
 
 def cell(path: Path,month: int,ref: str):
     with zipfile.ZipFile(path) as z:
@@ -51,13 +54,16 @@ def run(folder):
     sha=hashlib.sha256(BASE.read_bytes()).hexdigest()
     assert sha==EXPECTED_SHA,f"Release digest differs: {sha}"
     print("PASS_OFFICIAL_XLSM_SHA256_UNMODIFIED",sha)
-    for stem,mode,qcap in SCENARIOS:
+    for stem,mode,qcap,meal_month_cap,meal_quarter_cap in SCENARIOS:
         path=folder/f"{stem}.xlsx"
         assert path.is_file(),f"Missing UNO recalculated result {path}"
         recognized=[]
+        meal_recognized=[]
         for m in range(1,13):
             pos=(m-1)%3
-            if pos==0:recognized=[]
+            if pos==0:
+                recognized=[]
+                meal_recognized=[]
             raw=raw_hours(stem,m)
             prior=sum(recognized)
             cap=67 if mode=="예" else min(67,max(0,qcap-prior))
@@ -69,13 +75,22 @@ def run(folder):
             near(cell(path,m,f"F{summary+1}"),max(0,cap-raw)/24,f"{stem}-{m}-monthly-under")
             near(cell(path,m,f"F{summary+2}"),max(0,raw-cap)/24,f"{stem}-{m}-monthly-over")
             recognized.append(approved)
+            raw_meal=27 if m==3 else 25
+            applied_meal_cap=min(meal_month_cap,max(0,meal_quarter_cap-sum(meal_recognized)))
+            accepted_meal=min(raw_meal,applied_meal_cap)
+            near(cell(path,m,f"H{summary}"),accepted_meal,f"{stem}-{m}-meal-recognized")
+            near(cell(path,m,f"H{summary+1}"),max(0,applied_meal_cap-accepted_meal),f"{stem}-{m}-meal-under")
+            near(cell(path,m,f"H{summary+2}"),max(0,raw_meal-applied_meal_cap),f"{stem}-{m}-meal-over")
+            meal_recognized.append(accepted_meal)
             if pos==2:
-                near(cell(path,m,"M9"),60,f"{stem}-{m}-quarter-meal-cap")
-                for row in (10,11,12):
-                    near(cell(path,m,f"M{row}"),25,f"{stem}-{m}-recognized-meals-row{row}")
-                near(cell(path,m,"M13"),75,f"{stem}-{m}-quarter-meals-total")
-                near(cell(path,m,"M14"),0,f"{stem}-{m}-quarter-meals-under")
-                near(cell(path,m,"M15"),15,f"{stem}-{m}-quarter-meals-over")
+                near(cell(path,m,"M9"),meal_quarter_cap,f"{stem}-{m}-quarter-meal-cap")
+                for row,expected_meal in enumerate(meal_recognized,start=10):
+                    near(cell(path,m,f"M{row}"),expected_meal,f"{stem}-{m}-meal-month-{row}")
+                meal_total=sum(meal_recognized)
+                near(cell(path,m,"M13"),meal_total,f"{stem}-{m}-quarter-meals-accepted")
+                near(cell(path,m,"M14"),max(0,meal_quarter_cap-meal_total),f"{stem}-{m}-quarter-meals-left")
+                meal_only=sum(min(27 if x==3 else 25,meal_month_cap) for x in (m-2,m-1,m))
+                near(cell(path,m,"M15"),max(0,meal_only-meal_quarter_cap),f"{stem}-{m}-quarter-only-meal-over")
                 if mode=="예":
                     for row in range(1,8):
                         value=cell(path,m,f"M{row}")
@@ -97,9 +112,7 @@ def run(folder):
         near(cell(path,3,"F3"),3.5/24,f"{stem}-holiday-after-manual-exclusion")
         near(cell(path,3,"E4"),0,f"{stem}-holiday-zero-default")
         near(cell(path,3,"F4"),5/24,f"{stem}-holiday-after-zero-exclusion")
-        near(cell(path,3,"H33"),25,f"{stem}-monthly-meal-cap-25")
-        near(cell(path,3,"H35"),2,f"{stem}-monthly-meal-over-2")
-        print("SCENARIO_MODE_PASS",stem,mode,qcap)
+        print("SCENARIO_MODE_PASS",stem,mode,qcap,meal_month_cap,meal_quarter_cap)
     print("ALL_DUAL_MONTHLY_AND_QUARTERLY_SCENARIOS_PASS")
 
 if __name__=="__main__":
