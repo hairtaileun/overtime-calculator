@@ -72,6 +72,20 @@ def inspect_month(z0,z1,m):
         newref=colshift(old)
         match=re.fullmatch(r"([A-Z]+)(\d+)",newref)
         col,row=match.group(1),int(match.group(2))
+        # The new L/M summaries intentionally occupy EMPTY original style-only
+        # placeholders. Verify original value/formula/children were all blank;
+        # changed styles are legitimate only in these explicit positions.
+        overlay=(col in ("L","M") and
+                 (row in (17,18) or
+                  (m in (3,6,9,12) and 9<=row<=16)))
+        if overlay:
+            content=[e for e in source if e.tag not in (X+"f",X+"v")]
+            if formula(source) is not None or value(source) is not None or content:
+                unexpected.append((old,newref,"NONBLANK OVERWRITTEN BY SUMMARY",
+                                   formula(source),value(source)))
+            else:
+                stats["verified_blank_overlays"]+=1
+                continue
         # Structure and style: each old cell must keep its original type,
         # style, and metadata in its corresponding shifted location.
         p0=dict(source.attrib);p1=dict(target.attrib)
