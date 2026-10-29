@@ -98,6 +98,48 @@ def main():
                 for ref,exp in (("M10",25),("M11",25),("M12",10),("M13",60),("M14",0),("M15",15)):
                     near(get(sh,ref),exp,f"{mode}-quarter-{q}-{ref}")
         finally:doc.close(True)
+    # Fully independent overtime cap audit: user enters clock times for
+    # 25 days, which must generate 75h per month through unmodified F rows.
+    # Both staff types have monthly 67h; only nonfield enforces quarter 177h.
+    for mode in ("예","아니오"):
+        doc=load()
+        try:
+            setting=doc.Sheets.getByName("설정")
+            for ref,val in (("B10",mode),("B2",8),("B3",67),("B8",177),
+                            ("B6","예"),("B7",25),("B9",60)):
+                setcell(setting,ref,val)
+            for m in range(1,7):
+                sh=doc.Sheets.getByName(str(m)+"월")
+                for row in range(2,27):
+                    setcell(sh,f"B{row}","평일")
+                    setcell(sh,f"C{row}",6/24)
+                    setcell(sh,f"D{row}",19/24)
+            doc.calculateAll();doc.calculateAll()
+            for m in range(1,7):
+                sh=doc.Sheets.getByName(str(m)+"월")
+                summary=(29 if m==2 else 30 if m in (4,6,9,11) else 31)+2
+                pos=(m-1)%3
+                cap=67 if mode=="예" or pos<2 else 43
+                near(get(sh,"F2"),3/24,f"{mode}-actual-fullchain-month{m}-daily-3h")
+                near(get(sh,f"F{summary}"),75/24,f"{mode}-actual-fullchain-month{m}-raw-75h")
+                near(get(sh,"M17"),cap/24,f"{mode}-actual-fullchain-month{m}-cap")
+                near(get(sh,"M18"),cap/24,f"{mode}-actual-fullchain-month{m}-accepted")
+                near(get(sh,f"F{summary+2}"),(75-cap)/24,f"{mode}-actual-fullchain-month{m}-excess")
+                near(get(sh,f"H{summary}"),10 if pos==2 else 25,
+                     f"{mode}-actual-fullchain-month{m}-meal-accepted")
+            if mode=="아니오":
+                for qm in (3,6):
+                    sh=doc.Sheets.getByName(str(qm)+"월")
+                    near(get(sh,"M2"),67/24,f"{mode}-quarter{qm}-overtime-month1")
+                    near(get(sh,"M3"),67/24,f"{mode}-quarter{qm}-overtime-month2")
+                    near(get(sh,"M4"),43/24,f"{mode}-quarter{qm}-overtime-month3")
+                    near(get(sh,"M5"),177/24,f"{mode}-quarter{qm}-overtime-recognized-177h")
+            else:
+                for qm in (3,6):
+                    sh=doc.Sheets.getByName(str(qm)+"월")
+                    assert sh.getCellRangeByName("M5").getString() in ("",), "field quarter hours should be hidden"
+                    print("BOUNDARY_PASS",mode,"quarter",qm,"hours panel hidden",flush=True)
+        finally:doc.close(True)
     desktop.terminate()
     print("ALL_INDEPENDENT_DAILY_AND_ATTENDANCE_END_TO_END_TESTS_PASSED",flush=True)
 
