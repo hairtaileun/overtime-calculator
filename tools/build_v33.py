@@ -274,7 +274,18 @@ def patch_month(src, month_number):
                 formula=f"'{label}'!$H${calendar_days+2}"
             elif offset==4: label="분기급량합계";formula="SUM(M10:M12)"
             elif offset==5: label="분기급량미달";formula="MAX(0,M9-M13)"
-            else: label="분기급량초과";formula="MAX(0,M13-M9)"
+            else:
+                # Quarter-only excess: raw eligible meals first receive their
+                # individual month ceiling. Quarter recognition M13 is now
+                # <=60, so M13-M9 would incorrectly always show zero.
+                label="분기급량초과"
+                month_only=[]
+                for qm in range(month_number-2,month_number+1):
+                    days=29 if qm==2 else (30 if qm in (4,6,9,11) else 31)
+                    month_only.append(
+                        f"MIN(SUM('{qm}월'!$G$2:$H$"+str(days+1)+"),MAX(0,VALUE(설정!$B$7)))"
+                    )
+                formula="MAX(0,SUM("+",".join(month_only)+")-M9)"
             a=f'<c r="L{row}"{stylize(sty_label)} t="inlineStr"><is><t>{label}</t></is></c>'
             b=f'<c r="M{row}"{stylize(sty_value)}><f>{html.escape(formula,quote=False)}</f><v></v></c>'
             pat=rf'(<row\b(?=[^>]*\br="{row}")[^>]*>)(.*?)(</row>)'
