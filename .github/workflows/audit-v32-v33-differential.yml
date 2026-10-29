@@ -1,16 +1,22 @@
 name: v3.2 versus v3.3 independent differential regression
 on:
   push:
-    branches: [audit/v32-v33-differential-20261029]
+    branches: [main, audit/v32-v33-differential-20261029]
     paths:
       - tools/audit_v32_v33_differential.py
       - tools/test_v32_v33_behavior.py
       - .github/workflows/audit-v32-v33-differential.yml
+      - tools/build_v33.py
+      - 2026초과v3.2.xlsm
+      - 2026초과v3.3.xlsm
   pull_request:
     paths:
       - tools/audit_v32_v33_differential.py
       - tools/test_v32_v33_behavior.py
       - .github/workflows/audit-v32-v33-differential.yml
+      - tools/build_v33.py
+      - 2026초과v3.2.xlsm
+      - 2026초과v3.3.xlsm
 permissions:
   contents: read
 jobs:
