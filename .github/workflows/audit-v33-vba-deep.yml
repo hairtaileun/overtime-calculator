@@ -1,0 +1,30 @@
+name: Independent v3.3 VBA/OOXML forensic audit
+on:
+  push:
+    branches: [audit/v33-deep-independent-20261029]
+    paths: ['.github/workflows/audit-v33-vba-deep.yml']
+permissions:
+  contents: read
+jobs:
+  inspect-vba:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect preserved original VBA and spreadsheet package
+        shell: bash
+        run: |
+          python -m pip install -q oletools
+          python - <<'PY'
+          from oletools.olevba import VBA_Parser
+          from pathlib import Path
+          p=Path("2026초과v3.3.xlsm")
+          v=VBA_Parser(str(p))
+          print("VBA_HAS_MACROS",v.detect_vba_macros())
+          for fn,stream,name,data in v.extract_macros():
+              text=data.decode("utf-8","replace") if isinstance(data,bytes) else data
+              print("==== VBA MODULE",name,"====")
+              for i,line in enumerate(text.splitlines(),1):
+                  print(f"VBA {name}:{i} {line}")
+          v.close()
+          PY
