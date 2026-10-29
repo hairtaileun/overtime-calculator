@@ -115,7 +115,7 @@ def main():
                 for r in range(summary,summary+3):
                     # Monthly meal outcomes must be identical with B7=20 and
                     # B9=1000, even when v3.3 dynamically applies both ceilings.
-                    near(a.getCellRangeByName("H"+str(r)).getValue(),
+                    near(a.getCellRangeByName("G"+str(r)).getValue(),
                          b.getCellRangeByName("H"+str(r)).getValue(),
                          f"{year} month{m} legacy monthly meal summary H{r}")
                     matched+=1
