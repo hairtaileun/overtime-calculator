@@ -140,6 +140,27 @@ def main():
                     assert sh.getCellRangeByName("M5").getString() in ("",), "field quarter hours should be hidden"
                     print("BOUNDARY_PASS",mode,"quarter",qm,"hours panel hidden",flush=True)
         finally:doc.close(True)
+    # Independent meal-accounting ledger test across three month sheets.
+    # This reads real vendor names and uses the J/K shop-and-spend entry cells.
+    doc=load()
+    try:
+        ledger=doc.Sheets.getByName("급량")
+        shop_a=ledger.getCellRangeByName("A2").getString()
+        shop_b=ledger.getCellRangeByName("A3").getString()
+        assert shop_a and shop_b and shop_a!=shop_b, "Expected distinct configured meal vendors"
+        setcell(ledger,"B2",40000)
+        setcell(ledger,"C2",25000)
+        setcell(ledger,"B3",10000)
+        for m,shop,amount in ((1,shop_a,10000),(2,shop_a,7500),(3,shop_b,3000)):
+            sh=doc.Sheets.getByName(str(m)+"월")
+            setcell(sh,"J2",shop)
+            setcell(sh,"K2",amount)
+        doc.calculateAll();doc.calculateAll()
+        near(get(ledger,"O2"),17500,"meal-ledger-vendor-a-used-sum-all-months")
+        near(get(ledger,"P2"),47500,"meal-ledger-vendor-a-unspent-balance")
+        near(get(ledger,"O3"),3000,"meal-ledger-vendor-b-used-sum-all-months")
+        near(get(ledger,"P3"),7000,"meal-ledger-vendor-b-unspent-balance")
+    finally:doc.close(True)
     desktop.terminate()
     print("ALL_INDEPENDENT_DAILY_AND_ATTENDANCE_END_TO_END_TESTS_PASSED",flush=True)
 
