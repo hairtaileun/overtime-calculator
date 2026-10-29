@@ -1,0 +1,22 @@
+name: v3.2 versus v3.3 independent differential regression
+on:
+  push:
+    branches: [audit/v32-v33-differential-20261029]
+    paths:
+      - tools/audit_v32_v33_differential.py
+      - .github/workflows/audit-v32-v33-differential.yml
+  pull_request:
+    paths:
+      - tools/audit_v32_v33_differential.py
+      - .github/workflows/audit-v32-v33-differential.yml
+permissions:
+  contents: read
+jobs:
+  differential:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compare exact released v3.2 and v3.3 binaries cell-by-cell
+        shell: bash
+        run: python tools/audit_v32_v33_differential.py
