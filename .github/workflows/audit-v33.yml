@@ -1,7 +1,7 @@
 name: Audit v3.3 native macro workbook
 on:
   push:
-    branches: [main, fix/v33-dual-month-quarter-caps]
+    branches: [main, fix/v33-meal-month-quarter-dual-caps]
     paths: ['tools/audit_v33.py', '.github/workflows/audit-v33.yml', '2026초과v3.3.xlsm']
   pull_request:
     paths: ['tools/audit_v33.py', '.github/workflows/audit-v33.yml', '2026초과v3.3.xlsm']

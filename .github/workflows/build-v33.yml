@@ -1,7 +1,7 @@
 name: Build v3.3 preserved-macro XLSM
 on:
   push:
-    branches: [main, fix/v33-dual-month-quarter-caps]
+    branches: [main, fix/v33-meal-month-quarter-dual-caps]
     paths: ['tools/build_v33.py', '.github/workflows/build-v33.yml']
 permissions:
   contents: write

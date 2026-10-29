@@ -1,7 +1,7 @@
 name: Independent v3.3 numeric behavior scenarios (LibreOffice)
 on:
   push:
-    branches: [main, fix/v33-dual-month-quarter-caps]
+    branches: [main, fix/v33-meal-month-quarter-dual-caps]
     paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml', '2026초과v3.3.xlsm']
   pull_request:
     paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml', '2026초과v3.3.xlsm']
@@ -24,7 +24,7 @@ jobs:
       - name: Verify official workbook is present unchanged
         run: |
           sha256sum '2026초과v3.3.xlsm'
-      - name: Recalculate five scenarios without saving release
+      - name: Recalculate eight scenarios without saving release
         shell: bash
         run: |
           set -euo pipefail
@@ -38,6 +38,9 @@ jobs:
           test -s "$RUNNER_TEMP/v33_recalculated/nonfield_quarter100.xlsx"
           test -s "$RUNNER_TEMP/v33_recalculated/nonfield_low_prior.xlsx"
           test -s "$RUNNER_TEMP/v33_recalculated/nonfield_fullquarter.xlsx"
-      - name: Verify all 12 months and four quarter ceilings
+          test -s "$RUNNER_TEMP/v33_recalculated/nonfield_meal40.xlsx"
+          test -s "$RUNNER_TEMP/v33_recalculated/field_meal40.xlsx"
+          test -s "$RUNNER_TEMP/v33_recalculated/nonfield_meal20.xlsx"
+      - name: Verify 12 months of overtime and 25/60 meal limits in both duty modes
         run: |
           python tools/test_v33_runtime.py --verify "$RUNNER_TEMP/v33_recalculated"

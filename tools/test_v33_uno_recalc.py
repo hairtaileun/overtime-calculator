@@ -73,14 +73,12 @@ def populate(doc,mode,stem):
                 set_value(sh,f"F{row}",chunk/24)
                 row+=1
                 remaining-=chunk
-        if month==3:
-            # Test the actual monthly meal-cap formula: 27 daily eligible
-            # meals must produce 25 recognized and 2 above the monthly cap.
-            for row in range(2,summary):
-                set_value(sh,f"G{row}",1 if row<=28 else 0)
-                set_value(sh,f"H{row}",0)
-        else:
-            set_value(sh,f"H{summary}",25)
+        # Exercise the REAL monthly meal recognition formulas, feeding
+        # 25 eligible events in every month except March (27).
+        eligible=27 if month==3 else 25
+        for row in range(2,summary):
+            set_value(sh,f"G{row}",1 if row<2+eligible else 0)
+            set_value(sh,f"H{row}",0)
 
 def main():
     source=Path(sys.argv[1]).resolve()
@@ -90,12 +88,15 @@ def main():
     if not input_path.is_file():raise AssertionError(input_path)
     ctx=connect()
     desktop=ctx.ServiceManager.createInstanceWithContext("com.sun.star.frame.Desktop",ctx)
-    scenarios=(("nonfield","아니오",177),
-               ("field","예",177),
-               ("nonfield_quarter100","아니오",100),
-               ("nonfield_low_prior","아니오",177),
-               ("nonfield_fullquarter","아니오",177))
-    for stem,mode,quarter_cap in scenarios:
+    scenarios=(("nonfield","아니오",177,25,60),
+               ("field","예",177,25,60),
+               ("nonfield_quarter100","아니오",100,25,60),
+               ("nonfield_low_prior","아니오",177,25,60),
+               ("nonfield_fullquarter","아니오",177,25,60),
+               ("nonfield_meal40","아니오",177,25,40),
+               ("field_meal40","예",177,25,40),
+               ("nonfield_meal20","아니오",177,20,60))
+    for stem,mode,quarter_cap,month_meal_cap,quarter_meal_cap in scenarios:
         output_path=output/(stem+".xlsx")
         doc=desktop.loadComponentFromURL(
             uno.systemPathToFileUrl(str(input_path)),"_blank",0,
@@ -105,6 +106,8 @@ def main():
         try:
             populate(doc,mode,stem)
             set_value(doc.Sheets.getByName("설정"),"B8",quarter_cap)
+            set_value(doc.Sheets.getByName("설정"),"B7",month_meal_cap)
+            set_value(doc.Sheets.getByName("설정"),"B9",quarter_meal_cap)
             doc.enableAutomaticCalculation(True)
             doc.calculateAll()
             doc.calculateAll()
