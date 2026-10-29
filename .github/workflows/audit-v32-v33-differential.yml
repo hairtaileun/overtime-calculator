@@ -4,10 +4,12 @@ on:
     branches: [audit/v32-v33-differential-20261029]
     paths:
       - tools/audit_v32_v33_differential.py
+      - tools/test_v32_v33_behavior.py
       - .github/workflows/audit-v32-v33-differential.yml
   pull_request:
     paths:
       - tools/audit_v32_v33_differential.py
+      - tools/test_v32_v33_behavior.py
       - .github/workflows/audit-v32-v33-differential.yml
 permissions:
   contents: read
@@ -20,3 +22,24 @@ jobs:
       - name: Compare exact released v3.2 and v3.3 binaries cell-by-cell
         shell: bash
         run: python tools/audit_v32_v33_differential.py
+      - tools/test_v32_v33_behavior.py
+  behavioral-equivalence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LibreOffice Calc and UNO
+        shell: bash
+        run: |
+          if ! command -v libreoffice >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-calc python3-uno >/tmp/lo-diff-install.log 2>&1 || { tail -70 /tmp/lo-diff-install.log; exit 1; }
+          fi
+      - name: Compare real v3.2 versus v3.3 calculation results over all twelve months
+        shell: bash
+        run: |
+          set -euo pipefail
+          libreoffice -env:UserInstallation=file://$RUNNER_TEMP/lo_v32_v33 --headless --norestore --nodefault --nofirststartwizard --accept="socket,host=127.0.0.1,port=20271;urp;StarOffice.ServiceManager" >/tmp/lo-v32-v33.log 2>&1 &
+          LO_PID=$!
+          trap 'kill "$LO_PID" 2>/dev/null || true' EXIT
+          timeout 490 /usr/bin/python3 tools/test_v32_v33_behavior.py .
