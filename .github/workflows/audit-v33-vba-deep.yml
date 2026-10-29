@@ -1,0 +1,93 @@
+name: Independent v3.3 macro and real attendance end-to-end audit
+on:
+  push:
+    branches: [main, audit/v33-deep-independent-20261029]
+    paths: ['.github/workflows/audit-v33-vba-deep.yml', 'tools/audit_v33_daily_end_to_end.py', '2026초과v3.3.xlsm']
+  pull_request:
+    paths: ['.github/workflows/audit-v33-vba-deep.yml', 'tools/audit_v33_daily_end_to_end.py', '2026초과v3.3.xlsm']
+permissions:
+  contents: read
+jobs:
+  static-vba:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify original VBA macro operations and calendar edge cases
+        shell: bash
+        run: |
+          python -m pip install -q oletools
+          python - <<'PY'
+          from oletools.olevba import VBA_Parser
+          from zipfile import ZipFile
+          from xml.etree import ElementTree as ET
+          p="2026초과v3.3.xlsm"
+          v=VBA_Parser(p)
+          assert v.detect_vba_macros(), "VBA macros are missing"
+          modules={}
+          for _,_,name,data in v.extract_macros():
+              modules[name]=data.decode("utf-8","replace") if isinstance(data,bytes) else data
+          v.close()
+          wb=next(value for key,value in modules.items() if "통합" in key and "Workbook_Open" in value)
+          mod=modules["Module1.bas"]
+          assert "Private Sub Workbook_Open()" in wb
+          assert "SetupRegenerateButton" in wb
+          assert 'Set ws = ThisWorkbook.Worksheets("설정")' in mod
+          assert 'Set tgt = ws.Range("C1")' in mod
+          assert '.OnAction = "RegenerateAllMonthB"' in mod
+          assert "Public Sub RegenerateAllMonthB()" in mod
+          assert "ApplyDataValidation ws" in mod and "OverwriteWeekdayHoliday ws" in mod
+          assert 'Set rng = ws.Range("B2:B" & lastRow)' in mod
+          assert 'Set bCell = ws.Cells(r, "B")' in mod
+          assert 'wd = Weekday(dt, vbMonday)' in mod and 'If wd >= 6 Then' in mod
+          assert "GetDateFromA = DateSerial(y, m, d)" in mod
+          assert 'ws.Cells(r, "E")' not in mod and 'ws.Cells(r, "F")' not in mod
+          assert 'ws.Range("E' not in mod and 'ws.Range("F' not in mod
+          print("VBA_STATIC_PASS original trigger, C1 button, B-only regeneration, weekend classification, E/F preserved")
+          ns={"x":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+          with ZipFile(p) as z:
+              root=ET.fromstring(z.read("xl/worksheets/sheet4.xml"))
+              cells={c.attrib["r"]:c for c in root.findall(".//x:sheetData/x:row/x:c",ns)}
+              feb29=cells["A30"]
+              formula=feb29.find("x:f",ns)
+              assert formula is not None and "EOMONTH" in (formula.text or "")
+              val=feb29.find("x:v",ns)
+              assert val is None or not val.text, "2026 February 29 should be blank"
+              assert "IF($A30" in cells["E30"].find("x:f",ns).text
+              print("NON_LEAP_YEAR_PASS February 29 not active in 2026; leap-year formula preserved")
+          with ZipFile(p) as z:
+              sh=ET.fromstring(z.read("xl/worksheets/sheet2.xml"))
+              cc={c.attrib["r"]:c for c in sh.findall(".//x:sheetData/x:row/x:c",ns)}
+              ss=ET.fromstring(z.read("xl/sharedStrings.xml"))
+              strings=["".join(entry.itertext()) for entry in ss]
+              for row in range(1,6):
+                  for col in "ABCDEFGHIJKLMNOP":
+                      ref=col+str(row)
+                      c=cc.get(ref)
+                      if c is None:continue
+                      f=c.find("x:f",ns);v=c.find("x:v",ns)
+                      value=(v.text if v is not None else "")
+                      if c.get("t")=="s" and value: value=strings[int(value)]
+                      if f is not None or value:
+                          print("MEAL_LEDGER",ref,"formula",f.text if f is not None else "","value",value)
+          PY
+  numeric-attendance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install independent Calc engine
+        shell: bash
+        run: |
+          if ! command -v libreoffice >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-calc python3-uno >/tmp/lo-install.log 2>&1 || { tail -60 /tmp/lo-install.log; exit 1; }
+          fi
+      - name: Recalculate daily time thresholds and 2 quarters' actual attendance for both modes
+        shell: bash
+        run: |
+          set -euo pipefail
+          libreoffice -env:UserInstallation=file://$RUNNER_TEMP/lo_audit_v33_deep --headless --norestore --nodefault --nofirststartwizard --accept="socket,host=127.0.0.1,port=20270;urp;StarOffice.ServiceManager" >/tmp/lo-v33-deep.log 2>&1 &
+          LO_PID=$!
+          trap 'kill "$LO_PID" 2>/dev/null || true' EXIT
+          timeout 220 /usr/bin/python3 tools/audit_v33_daily_end_to_end.py .
