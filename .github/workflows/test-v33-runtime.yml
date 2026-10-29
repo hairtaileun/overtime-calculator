@@ -1,10 +1,10 @@
 name: Independent v3.3 numeric behavior scenarios (LibreOffice)
 on:
   push:
-    branches: [main, audit/v33-independent-scenarios-20261029]
+    branches: [main, fix/v33-dual-month-quarter-caps]
     paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml', '2026초과v3.3.xlsm']
   pull_request:
-    paths: ['tools/test_v33_runtime.py', '.github/workflows/test-v33-runtime.yml']
+    paths: ['tools/test_v33_runtime.py', 'tools/test_v33_uno_recalc.py', '.github/workflows/test-v33-runtime.yml', '2026초과v3.3.xlsm']
 permissions:
   contents: read
 jobs:
@@ -24,7 +24,7 @@ jobs:
       - name: Verify official workbook is present unchanged
         run: |
           sha256sum '2026초과v3.3.xlsm'
-      - name: Recalculate both copies (original release workbook never resaved)
+      - name: Recalculate five scenarios without saving release
         shell: bash
         run: |
           set -euo pipefail
@@ -35,6 +35,9 @@ jobs:
           timeout 240 /usr/bin/python3 tools/test_v33_uno_recalc.py "." "$RUNNER_TEMP/v33_recalculated"
           test -s "$RUNNER_TEMP/v33_recalculated/nonfield.xlsx"
           test -s "$RUNNER_TEMP/v33_recalculated/field.xlsx"
-      - name: Verify 4 quarters across both employment modes and daily time exclusions
+          test -s "$RUNNER_TEMP/v33_recalculated/nonfield_quarter100.xlsx"
+          test -s "$RUNNER_TEMP/v33_recalculated/nonfield_low_prior.xlsx"
+          test -s "$RUNNER_TEMP/v33_recalculated/nonfield_fullquarter.xlsx"
+      - name: Verify all 12 months and four quarter ceilings
         run: |
           python tools/test_v33_runtime.py --verify "$RUNNER_TEMP/v33_recalculated"

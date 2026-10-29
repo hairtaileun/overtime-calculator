@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Read-only, independent numeric regression of the official v3.3 workbook.
+"""Independent read-only numerical verification of official macro-enabled v3.3.
 
-The paired UNO driver loads and edits official XLSM in memory without saving
-it. This verifier reads its temporary recalculated XLSX output only.
+Five scenarios exercise the SAME release binary with values edited through UNO.
+The XLSM is never saved and the verifier examines only temporary XLSX copies.
 """
 from __future__ import annotations
 import argparse,hashlib,math,zipfile
@@ -10,84 +10,99 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 BASE=Path("2026초과v3.3.xlsm")
-EXPECTED_SHA="604684b58bb0c9676d987816ad466fbf6aa10fd74b68de1c791f1138fce4f7a5"
+EXPECTED_SHA="e4a1e6ddca6cccaf56dca0bc7058b0058b5bbeb6a63d181abc576926723fe800"
 NS={"m":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 DAYS={m:29 if m==2 else 30 if m in (4,6,9,11) else 31 for m in range(1,13)}
+SCENARIOS=(("nonfield","아니오",177),
+           ("field","예",177),
+           ("nonfield_quarter100","아니오",100),
+           ("nonfield_low_prior","아니오",177),
+           ("nonfield_fullquarter","아니오",177))
 
 def cell(path: Path,month: int,ref: str):
-    sheet_number=month+2 if month else 1
     with zipfile.ZipFile(path) as z:
-        xml=ET.fromstring(z.read(f"xl/worksheets/sheet{sheet_number}.xml"))
-        el=xml.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',NS)
-        if el is None:return None
-        v=el.find("m:v",NS)
+        x=ET.fromstring(z.read(f"xl/worksheets/sheet{month+2}.xml"))
+        c=x.find(f'.//m:sheetData/m:row/m:c[@r="{ref}"]',NS)
+        if c is None:return None
+        v=c.find("m:v",NS)
         if v is not None and v.text is not None:
-            if el.get("t") in ("str","s","inlineStr"):return v.text
+            if c.get("t") in ("str","s","inlineStr"):return v.text
             try:return float(v.text)
             except ValueError:return v.text
-        i=el.find("m:is",NS)
+        i=c.find("m:is",NS)
         if i is not None:return "".join(i.itertext())
         return ""
 
 def near(actual,expected,label):
-    if not isinstance(actual,(int,float)) or not math.isclose(actual,expected,rel_tol=0,abs_tol=1e-7):
-        raise AssertionError(f"{label} expected={expected}, actual={actual!r}")
+    if not isinstance(actual,(int,float)) or not math.isclose(actual,expected,abs_tol=1e-7,rel_tol=0):
+        raise AssertionError(f"{label}: expected={expected!r} got={actual!r}")
     print("SCENARIO_PASS",label,round(actual,10))
 
-def verify(folder: Path):
-    assert BASE.is_file(),"original XLSM is missing"
-    digest=hashlib.sha256(BASE.read_bytes()).hexdigest()
-    assert digest==EXPECTED_SHA,(digest,EXPECTED_SHA)
-    print("PASS_RELEASE_BINARY_UNCHANGED",digest)
-    for mode in ("아니오","예"):
-        stem="nonfield" if mode=="아니오" else "field"
-        p=folder/f"{stem}.xlsx"
-        assert p.is_file(),p
-        for month in (3,6,9,12):
-            current=15 if month in (3,9) else 30
-            first=200 if month==9 else 100
-            preceding=first+60
-            cap=(max(0,177-preceding) if mode=="아니오" else 67)
-            summary=DAYS[month]+2
-            near(cell(p,month,"M17"),cap/24,f"{mode}-{month}-applied-month-cap")
-            near(cell(p,month,f"F{summary+1}"),max(0,cap-current)/24,f"{mode}-{month}-monthly-under")
-            near(cell(p,month,f"F{summary+2}"),max(0,current-cap)/24,f"{mode}-{month}-monthly-over")
-            near(cell(p,month,"M9"),60,f"{mode}-{month}-quarter-meal-cap")
-            for row in (10,11,12):
-                near(cell(p,month,f"M{row}"),25,f"{mode}-{month}-recognized-meal-{row}")
-            near(cell(p,month,"M13"),75,f"{mode}-{month}-quarter-meal-total")
-            near(cell(p,month,"M14"),0,f"{mode}-{month}-quarter-meal-under")
-            near(cell(p,month,"M15"),15,f"{mode}-{month}-quarter-meal-over")
-            if mode=="예":
-                for row in range(1,8):
-                    v=cell(p,month,f"M{row}")
-                    if v not in ("",None):raise AssertionError(f"field-mode unused panel M{row}={v!r}")
-                print("SCENARIO_PASS",mode,month,"hours-panel-unused")
-            else:
-                for row,x in enumerate((177,first/24,60/24,current/24),start=1):
-                    near(cell(p,month,f"M{row}"),x,f"{mode}-{month}-quarter-hours-{row}")
-                total=preceding+current
-                near(cell(p,month,"M5"),total/24,f"{mode}-{month}-quarter-hours-total")
-                near(cell(p,month,"M6"),max(0,177-total)/24,f"{mode}-{month}-quarter-hours-under")
-                near(cell(p,month,"M7"),max(0,total-177)/24,f"{mode}-{month}-quarter-hours-over")
-        # Regular months retain standalone 67h cap regardless of employment mode.
-        near(cell(p,1,"F34"),0,f"{mode}-january-under-67")
-        near(cell(p,1,"F35"),33/24,f"{mode}-january-over-67")
-        near(cell(p,2,"F32"),7/24,f"{mode}-february-under-67")
-        # Directly edited daily input cells: weekday, holiday and override.
-        near(cell(p,3,"E2"),1/24,f"{mode}-weekday-default-1hour")
-        near(cell(p,3,"F2"),3/24,f"{mode}-weekday-net-3hours")
-        near(cell(p,3,"E3"),1.5/24,f"{mode}-holiday-exclusion-override")
-        near(cell(p,3,"F3"),3.5/24,f"{mode}-holiday-net-3.5hours")
-        near(cell(p,3,"E4"),0,f"{mode}-holiday-default-zero")
-        near(cell(p,3,"F4"),5/24,f"{mode}-holiday-net-5hours")
-        # 27 daily meals: 25 recognized, 2 above monthly cap.
-        near(cell(p,3,"H33"),25,f"{mode}-march-meal-recognized-25")
-        near(cell(p,3,"H35"),2,f"{mode}-march-meal-over-2")
-    print("ALL_SCENARIO_TESTS_PASSED")
+def raw_hours(stem,month):
+    pos=(month-1)%3
+    h=(100,60,15 if ((month-1)//3)%2==0 else 70)[pos]
+    if month==7:h=200
+    if stem=="nonfield_low_prior" and month<=3:h={1:20,2:20,3:75}[month]
+    if stem=="nonfield_fullquarter" and month<=3:h=67
+    return h
+
+def run(folder):
+    assert BASE.is_file(),"Official v3.3 release file not present"
+    sha=hashlib.sha256(BASE.read_bytes()).hexdigest()
+    assert sha==EXPECTED_SHA,f"Release digest differs: {sha}"
+    print("PASS_OFFICIAL_XLSM_SHA256_UNMODIFIED",sha)
+    for stem,mode,qcap in SCENARIOS:
+        path=folder/f"{stem}.xlsx"
+        assert path.is_file(),f"Missing UNO recalculated result {path}"
+        recognized=[]
+        for m in range(1,13):
+            pos=(m-1)%3
+            if pos==0:recognized=[]
+            raw=raw_hours(stem,m)
+            prior=sum(recognized)
+            cap=67 if mode=="예" else min(67,max(0,qcap-prior))
+            approved=min(raw,cap)
+            summary=DAYS[m]+2
+            near(cell(path,m,f"F{summary}"),raw/24,f"{stem}-{m}-raw-month-hours")
+            near(cell(path,m,"M17"),cap/24,f"{stem}-{m}-applied-month-cap")
+            near(cell(path,m,"M18"),approved/24,f"{stem}-{m}-recognized-month-hours")
+            near(cell(path,m,f"F{summary+1}"),max(0,cap-raw)/24,f"{stem}-{m}-monthly-under")
+            near(cell(path,m,f"F{summary+2}"),max(0,raw-cap)/24,f"{stem}-{m}-monthly-over")
+            recognized.append(approved)
+            if pos==2:
+                near(cell(path,m,"M9"),60,f"{stem}-{m}-quarter-meal-cap")
+                for row in (10,11,12):
+                    near(cell(path,m,f"M{row}"),25,f"{stem}-{m}-recognized-meals-row{row}")
+                near(cell(path,m,"M13"),75,f"{stem}-{m}-quarter-meals-total")
+                near(cell(path,m,"M14"),0,f"{stem}-{m}-quarter-meals-under")
+                near(cell(path,m,"M15"),15,f"{stem}-{m}-quarter-meals-over")
+                if mode=="예":
+                    for row in range(1,8):
+                        value=cell(path,m,f"M{row}")
+                        if value not in ("",None):
+                            raise AssertionError(f"{stem}-{m}-hours-panel-not-disabled M{row}={value!r}")
+                    print("SCENARIO_PASS",stem,m,"field-quarter-hours-panel-unused")
+                else:
+                    near(cell(path,m,"M1"),qcap,f"{stem}-{m}-quarter-ceiling")
+                    for row,accepted in enumerate(recognized,start=2):
+                        near(cell(path,m,f"M{row}"),accepted/24,f"{stem}-{m}-quarter-accepted-row{row}")
+                    total=sum(recognized)
+                    near(cell(path,m,"M5"),total/24,f"{stem}-{m}-quarter-accepted-total")
+                    near(cell(path,m,"M6"),max(0,qcap-total)/24,f"{stem}-{m}-quarter-left")
+                    near(cell(path,m,"M7"),max(0,total-qcap)/24,f"{stem}-{m}-quarter-over")
+        # Test TRUE daily-formula recomputation with manually editable exclusion.
+        near(cell(path,3,"E2"),1/24,f"{stem}-weekday-default-exclusion")
+        near(cell(path,3,"F2"),3/24,f"{stem}-weekday-after-exclusion")
+        near(cell(path,3,"E3"),1.5/24,f"{stem}-holiday-manual-exclusion")
+        near(cell(path,3,"F3"),3.5/24,f"{stem}-holiday-after-manual-exclusion")
+        near(cell(path,3,"E4"),0,f"{stem}-holiday-zero-default")
+        near(cell(path,3,"F4"),5/24,f"{stem}-holiday-after-zero-exclusion")
+        near(cell(path,3,"H33"),25,f"{stem}-monthly-meal-cap-25")
+        near(cell(path,3,"H35"),2,f"{stem}-monthly-meal-over-2")
+        print("SCENARIO_MODE_PASS",stem,mode,qcap)
+    print("ALL_DUAL_MONTHLY_AND_QUARTERLY_SCENARIOS_PASS")
 
 if __name__=="__main__":
-    parser=argparse.ArgumentParser()
-    parser.add_argument("--verify",type=Path,required=True)
-    args=parser.parse_args()
-    verify(args.verify)
+    p=argparse.ArgumentParser()
+    p.add_argument("--verify",type=Path,required=True)
+    run(p.parse_args().verify)
