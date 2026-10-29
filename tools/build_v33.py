@@ -190,6 +190,34 @@ def patch_month(src, month_number):
             return mt.group(1)+content+mt.group(3)
         xml,n=re.subn(pat,add_month_cap,xml,count=1,flags=re.S)
         check(n==1,f"month-{month_number}-dual-cap-row-{row}")
+    # Meal acceptance is bounded by BOTH monthly B7 and quarterly B9,
+    # independent of the field-duty switch B10. Previous months' H summary
+    # already reflects both limits, avoiding circular references.
+    previous_meals=[
+        f"'{k}월'!$H$"+str((29 if k==2 else 30 if k in (4,6,9,11) else 31)+2)
+        for k in range(qfirst,month_number)
+    ]
+    previous_meal_total="SUM("+",".join(previous_meals)+")" if previous_meals else "0"
+    meal_cap=f"MIN(MAX(0,VALUE(설정!$B$7)),MAX(0,MAX(0,VALUE(설정!$B$9))-{previous_meal_total}))"
+    raw_meals=f"SUM(G2:H{summary-1})"
+    meal_formulas={
+        summary:f"MIN({raw_meals},{meal_cap})",
+        summary+1:f"MAX(0,{meal_cap}-H{summary})",
+        summary+2:f"MAX(0,{raw_meals}-{meal_cap})",
+    }
+    for meal_row,meal_formula in meal_formulas.items():
+        fp=rf'(<c\b(?=[^>]*\br="H{meal_row}")[^>]*>)(.*?)(</c>)'
+        def rep_meal(mt):
+            inside=mt.group(2)
+            if re.search(r'<f\b[^>]*/>',inside):
+                inside,num=re.subn(r'<f\b[^>]*/>',lambda _:f'<f>{html.escape(meal_formula,quote=False)}</f>',inside,count=1)
+            else:
+                inside,num=re.subn(r'<f\b[^>]*>.*?</f>',lambda _:f'<f>{html.escape(meal_formula,quote=False)}</f>',inside,count=1,flags=re.S)
+            check(num==1,f"meal-source-formula-{month_number}-H{meal_row}")
+            inside=re.sub(r'<v>.*?</v>','<v></v>',inside,count=1,flags=re.S)
+            return mt.group(1)+inside+mt.group(3)
+        xml,n=re.subn(fp,rep_meal,xml,count=1,flags=re.S)
+        check(n==1,f"meal-dual-cap-month-{month_number}-H{meal_row}")
     # Formula defaults dynamically follow weekday/holiday until overwritten.
     if month_number in (3,6,9,12):
         i=month_number-3
