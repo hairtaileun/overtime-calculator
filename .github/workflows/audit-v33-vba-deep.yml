@@ -2,7 +2,7 @@ name: Independent v3.3 VBA/OOXML forensic audit
 on:
   push:
     branches: [audit/v33-deep-independent-20261029]
-    paths: ['.github/workflows/audit-v33-vba-deep.yml']
+    paths: ['.github/workflows/audit-v33-vba-deep.yml', 'tools/audit_v33_daily_end_to_end.py']
 permissions:
   contents: read
 jobs:
@@ -52,3 +52,23 @@ jobs:
                   if c is not None and c.get("t")=="s":
                       print("FEB_SHARED_STRING",row,strings[int(c.find("x:v",ns).text)])
           PY
+  numeric-attendance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install independent Calc engine
+        shell: bash
+        run: |
+          if ! command -v libreoffice >/dev/null; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-calc python3-uno >/tmp/lo-install.log 2>&1 || { tail -60 /tmp/lo-install.log; exit 1; }
+          fi
+      - name: Start UNO and test exact user-entered times, weekday/holiday and meal recognition
+        shell: bash
+        run: |
+          set -euo pipefail
+          libreoffice -env:UserInstallation=file://$RUNNER_TEMP/lo_audit_v33_deep --headless --norestore --nodefault --nofirststartwizard --accept="socket,host=127.0.0.1,port=20270;urp;StarOffice.ServiceManager" >/tmp/lo-v33-deep.log 2>&1 &
+          LO_PID=$!
+          trap 'kill "$LO_PID" 2>/dev/null || true' EXIT
+          timeout 220 /usr/bin/python3 tools/audit_v33_daily_end_to_end.py .
