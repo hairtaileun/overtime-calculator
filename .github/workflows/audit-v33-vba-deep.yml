@@ -28,3 +28,27 @@ jobs:
                   print(f"VBA {name}:{i} {line}")
           v.close()
           PY
+      - name: Inspect 2026 February date rows and cross-year templates
+        shell: bash
+        run: |
+          python - <<'PY'
+          from zipfile import ZipFile
+          from xml.etree import ElementTree as ET
+          p="2026초과v3.3.xlsm"
+          ns={"x":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+          with ZipFile(p) as z:
+              root=ET.fromstring(z.read("xl/worksheets/sheet4.xml"))
+              cells={c.attrib["r"]:c for c in root.findall(".//x:sheetData/x:row/x:c",ns)}
+              for row in (27,28,29,30,31,32,33):
+                  for col in "ABEFGH":
+                      c=cells.get(f"{col}{row}")
+                      if c is None: continue
+                      f=c.find("x:f",ns);v=c.find("x:v",ns)
+                      print("FEB_CELL",f"{col}{row}","type",c.get("t"),"formula",f.text if f is not None else None,"value",v.text if v is not None else None)
+              ss=ET.fromstring(z.read("xl/sharedStrings.xml"))
+              strings=["".join(si.itertext()) for si in ss]
+              for row in (29,30):
+                  c=cells.get(f"A{row}")
+                  if c is not None and c.get("t")=="s":
+                      print("FEB_SHARED_STRING",row,strings[int(c.find("x:v",ns).text)])
+          PY
