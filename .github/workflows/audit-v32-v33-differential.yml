@@ -22,7 +22,6 @@ jobs:
       - name: Compare exact released v3.2 and v3.3 binaries cell-by-cell
         shell: bash
         run: python tools/audit_v32_v33_differential.py
-      - tools/test_v32_v33_behavior.py
   behavioral-equivalence:
     runs-on: ubuntu-latest
     timeout-minutes: 18
